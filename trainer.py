@@ -85,7 +85,6 @@ class Trainer(object):
         self.is_exploit_log = []
         self.clearance_log = []
 
-
     # Pre-load execution info and RL variables
     def preload(self, transitions_directory):
         self.executed_action_log = np.loadtxt(os.path.join(transitions_directory, 'executed-action.log.txt'), delimiter=' ')
@@ -115,7 +114,6 @@ class Trainer(object):
         self.clearance_log = np.loadtxt(os.path.join(transitions_directory, 'clearance.log.txt'), delimiter=' ')
         self.clearance_log.shape = (self.clearance_log.shape[0],1)
         self.clearance_log = self.clearance_log.tolist()
-
 
     # Compute forward pass through model to compute affordances/Q
     def forward(self, color_heightmap, depth_heightmap, is_volatile=False, specific_rotation=-1):
@@ -186,7 +184,6 @@ class Trainer(object):
 
         return push_predictions, grasp_predictions, state_feat
 
-
     def get_label_value(self, primitive_action, push_success, grasp_success, change_detected, prev_push_predictions, prev_grasp_predictions, next_color_heightmap, next_depth_heightmap):
 
         if self.method == 'reactive':
@@ -235,7 +232,6 @@ class Trainer(object):
                 expected_reward = current_reward + self.future_reward_discount * future_reward
                 print('Expected reward: %f + %f x %f = %f' % (current_reward, self.future_reward_discount, future_reward, expected_reward))
             return expected_reward, current_reward
-
 
     # Compute labels and backpropagate
     def backprop(self, color_heightmap, depth_heightmap, primitive_action, best_pix_ind, label_value):
@@ -367,7 +363,6 @@ class Trainer(object):
             print('Training loss: %f' % (loss_value))
             self.optimizer.step()
 
-
     def get_prediction_vis(self, predictions, color_heightmap, best_pix_ind):
 
         canvas = None
@@ -398,7 +393,6 @@ class Trainer(object):
 
         return canvas
 
-
     def push_heuristic(self, depth_heightmap):
 
         num_rotations = 16
@@ -420,7 +414,6 @@ class Trainer(object):
 
         best_pix_ind = np.unravel_index(np.argmax(push_predictions), push_predictions.shape)
         return best_pix_ind
-
 
     def grasp_heuristic(self, depth_heightmap):
 

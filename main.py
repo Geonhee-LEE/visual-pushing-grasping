@@ -19,8 +19,6 @@ import utils
 
 
 def main(args):
-
-
     # --------------- Setup options ---------------
     is_sim = args.is_sim # Run in simulation?
     obj_mesh_dir = os.path.abspath(args.obj_mesh_dir) if is_sim else None # Directory containing 3D mesh files (.obj) of objects to be added to simulation
@@ -216,7 +214,7 @@ def main(args):
         iteration_time_0 = time.time()
 
         # Make sure simulation is still stable (if not, reset simulation)
-        if is_sim: robot.check_sim()
+        # if is_sim: robot.check_sim()
 
         # Get latest RGB-D image
         color_img, depth_img = robot.get_camera_data()
@@ -239,17 +237,8 @@ def main(args):
             empty_threshold = 10  
         if np.sum(stuff_count) < empty_threshold or (is_sim and no_change_count[0] + no_change_count[1] > 10):
             no_change_count = [0, 0]
-            if is_sim:
-                print('Not enough objects in view (value: %d)! Repositioning objects.' % (np.sum(stuff_count)))
-                robot.restart_sim()
-                robot.add_objects()
-                if is_testing: # If at end of test run, re-load original weights (before test run)
-                    trainer.model.load_state_dict(torch.load(snapshot_file))
-            else:
-                # print('Not enough stuff on the table (value: %d)! Pausing for 30 seconds.' % (np.sum(stuff_count)))
-                # time.sleep(30)
-                print('Not enough stuff on the table (value: %d)! Flipping over bin of objects...' % (np.sum(stuff_count)))
-                robot.restart_real()
+            print('Not enough stuff on the table (value: %d)! Flipping over bin of objects...' % (np.sum(stuff_count)))
+            robot.restart_real()
 
             trainer.clearance_log.append([trainer.iteration]) 
             logger.write_to_log('clearance', trainer.clearance_log)

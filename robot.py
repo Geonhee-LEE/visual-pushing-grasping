@@ -5,7 +5,6 @@ import time
 import os
 import numpy as np
 import utils
-from simulation import vrep
 
 class Robot(object):
     def __init__(self, is_sim, obj_mesh_dir, num_obj, workspace_limits,
@@ -54,71 +53,6 @@ class Robot(object):
         # Load camera pose (from running calibrate.py), intrinsics and depth scale
         self.cam_pose = np.loadtxt('real/camera_pose.txt', delimiter=' ')
         self.cam_depth_scale = np.loadtxt('real/camera_depth_scale.txt', delimiter=' ')
-
-
-    def get_task_score(self):
-
-        key_positions = np.asarray([[-0.625, 0.125, 0.0], # red
-                                    [-0.625, -0.125, 0.0], # blue
-                                    [-0.375, 0.125, 0.0], # green
-                                    [-0.375, -0.125, 0.0]]) #yellow
-
-        obj_positions = np.asarray(self.get_obj_positions())
-        obj_positions.shape = (1, obj_positions.shape[0], obj_positions.shape[1])
-        obj_positions = np.tile(obj_positions, (key_positions.shape[0], 1, 1))
-
-        key_positions.shape = (key_positions.shape[0], 1, key_positions.shape[1])
-        key_positions = np.tile(key_positions, (1 ,obj_positions.shape[1] ,1))
-
-        key_dist = np.sqrt(np.sum(np.power(obj_positions - key_positions, 2), axis=2))
-        key_nn_idx = np.argmin(key_dist, axis=0)
-
-        return np.sum(key_nn_idx == np.asarray(range(self.num_obj)) % 4)
-
-    def check_goal_reached(self):
-
-        goal_reached = self.get_task_score() == self.num_obj
-        return goal_reached
-
-    def get_obj_positions(self):
-
-        obj_positions = []
-        for object_handle in self.object_handles:
-            sim_ret, object_position = vrep.simxGetObjectPosition(self.sim_client, object_handle, -1, vrep.simx_opmode_blocking)
-            obj_positions.append(object_position)
-
-        return obj_positions
-
-    def get_obj_positions_and_orientations(self):
-
-        obj_positions = []
-        obj_orientations = []
-        for object_handle in self.object_handles:
-            sim_ret, object_position = vrep.simxGetObjectPosition(self.sim_client, object_handle, -1, vrep.simx_opmode_blocking)
-            sim_ret, object_orientation = vrep.simxGetObjectOrientation(self.sim_client, object_handle, -1, vrep.simx_opmode_blocking)
-            obj_positions.append(object_position)
-            obj_orientations.append(object_orientation)
-
-        return obj_positions, obj_orientations
-
-    def reposition_objects(self, workspace_limits):
-
-        # Move gripper out of the way
-        self.move_to([-0.1, 0, 0.3], None)
-        # sim_ret, UR5_target_handle = vrep.simxGetObjectHandle(self.sim_client,'UR5_target',vrep.simx_opmode_blocking)
-        # vrep.simxSetObjectPosition(self.sim_client, UR5_target_handle, -1, (-0.5,0,0.3), vrep.simx_opmode_blocking)
-        # time.sleep(1)
-
-        for object_handle in self.object_handles:
-
-            # Drop object at random x,y location and random orientation in robot workspace
-            drop_x = (workspace_limits[0][1] - workspace_limits[0][0] - 0.2) * np.random.random_sample() + workspace_limits[0][0] + 0.1
-            drop_y = (workspace_limits[1][1] - workspace_limits[1][0] - 0.2) * np.random.random_sample() + workspace_limits[1][0] + 0.1
-            object_position = [drop_x, drop_y, 0.15]
-            object_orientation = [2*np.pi*np.random.random_sample(), 2*np.pi*np.random.random_sample(), 2*np.pi*np.random.random_sample()]
-            vrep.simxSetObjectPosition(self.sim_client, object_handle, -1, object_position, vrep.simx_opmode_blocking)
-            vrep.simxSetObjectOrientation(self.sim_client, object_handle, -1, object_orientation, vrep.simx_opmode_blocking)
-            time.sleep(2)
 
     def get_camera_data(self):
 
@@ -582,65 +516,6 @@ class Robot(object):
                 break
             tool_analog_input2 = new_tool_analog_input2
 
-    '''
-     def place(self, position, orientation, workspace_limits):
-         print('Executing: place at (%f, %f, %f)' % (position[0], position[1], position[2]))
-
-         # Attempt placing
-         position[2] = max(position[2], workspace_limits[2][0])
-         self.move_to([position[0], position[1], position[2] + 0.2], orientation)
-         self.move_to([position[0], position[1], position[2] + 0.05], orientation)
-         self.tool_acc = 1 # 0.05
-         self.tool_vel = 0.02 # 0.02
-         self.move_to([position[0], position[1], position[2]], orientation)
-         self.open_gripper()
-         self.tool_acc = 1 # 0.5
-         self.tool_vel = 0.2 # 0.2
-         self.move_to([position[0], position[1], position[2] + 0.2], orientation)
-         self.close_gripper()
-         self.go_home()
-    '''
-    '''
-     def place(self, position, heightmap_rotation_angle, workspace_limits):
-         print('Executing: place at (%f, %f, %f)' % (position[0], position[1], position[2]))
-
-         if self.is_sim:
-
-             # Compute tool orientation from heightmap rotation angle
-             tool_rotation_angle = (heightmap_rotation_angle % np.pi) - np.pi/2
-
-             # Avoid collision with floor
-             position[2] = max(position[2] + 0.04 + 0.02, workspace_limits[2][0] + 0.02)
-
-             # Move gripper to location above place target
-             place_location_margin = 0.1
-             sim_ret, UR5_target_handle = vrep.simxGetObjectHandle(self.sim_client,'UR5_target',vrep.simx_opmode_blocking)
-             location_above_place_target = (position[0], position[1], position[2] + place_location_margin)
-             self.move_to(location_above_place_target, None)
-
-             sim_ret,gripper_orientation = vrep.simxGetObjectOrientation(self.sim_client, UR5_target_handle, -1, vrep.simx_opmode_blocking)
-             if tool_rotation_angle - gripper_orientation[1] > 0:
-                 increment = 0.2
-             else:
-                 increment = -0.2
-             while abs(tool_rotation_angle - gripper_orientation[1]) >= 0.2:
-                 vrep.simxSetObjectOrientation(self.sim_client, UR5_target_handle, -1, (np.pi/2, gripper_orientation[1] + increment, np.pi/2), vrep.simx_opmode_blocking)
-                 time.sleep(0.01)
-                 sim_ret,gripper_orientation = vrep.simxGetObjectOrientation(self.sim_client, UR5_target_handle, -1, vrep.simx_opmode_blocking)
-             vrep.simxSetObjectOrientation(self.sim_client, UR5_target_handle, -1, (np.pi/2, tool_rotation_angle, np.pi/2), vrep.simx_opmode_blocking)
-
-             # Approach place target
-             self.move_to(position, None)
-
-             # Ensure gripper is open
-             self.open_gripper()
-
-             # Move gripper to location above place target
-             self.move_to(location_above_place_target, None)
-
-             place_success = True
-             return place_success
-    '''
 
 
 
