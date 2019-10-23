@@ -26,7 +26,6 @@ class Camera(object):
         self.intrinsics = None
         self.get_data()
 
-
     def get_data(self):
 
         # Ping the server with anything
@@ -57,58 +56,57 @@ class Camera(object):
 # import rospy
 # from realsense_camera.msg import StreamData
 
-# class Camera(object):
+'''
+class Camera(object):
+    def __init__(self):
 
+        # Data options (change me)
+        self.im_height = 720
+        self.im_width = 1280
 
-#     def __init__(self):
+        # RGB-D data variables
+        self.color_data = np.zeros((self.im_height,self.im_width,3))
+        self.depth_data = np.zeros((self.im_height,self.im_width))
+        self.intrinsics = np.zeros((3,3))
 
-#         # Data options (change me)
-#         self.im_height = 720
-#         self.im_width = 1280
+        # Start ROS subscriber to fetch RealSense RGB-D data
+        rospy.init_node('listener', anonymous=True)
+        rospy.Subscriber("/realsense_camera/stream", StreamData, self.realsense_stream_callback)
 
-#         # RGB-D data variables
-#         self.color_data = np.zeros((self.im_height,self.im_width,3))
-#         self.depth_data = np.zeros((self.im_height,self.im_width))
-#         self.intrinsics = np.zeros((3,3))
+        # Recording variables
+        self.frame_idx = 0
+        self.is_recording = False
+        self.recording_directory = ''
 
-#         # Start ROS subscriber to fetch RealSense RGB-D data
-#         rospy.init_node('listener', anonymous=True)
-#         rospy.Subscriber("/realsense_camera/stream", StreamData, self.realsense_stream_callback)
+    # ROS subscriber callback function
+    def realsense_stream_callback(self, data):
+        tmp_color_data = np.asarray(bytearray(data.color))
+        tmp_color_data.shape = (self.im_height,self.im_width,3)
+        tmp_depth_data = np.asarray(data.depth)
+        tmp_depth_data.shape = (self.im_height,self.im_width)
+        tmp_depth_data = tmp_depth_data.astype(float)/10000
+        tmp_intrinsics = np.asarray(data.intrinsics)
+        tmp_intrinsics.shape = (3,3)
 
-#         # Recording variables
-#         self.frame_idx = 0
-#         self.is_recording = False
-#         self.recording_directory = ''
+        self.color_data = tmp_color_data
+        self.depth_data = tmp_depth_data
+        self.intrinsics = tmp_intrinsics
 
-#     # ROS subscriber callback function
-#     def realsense_stream_callback(self, data):
-#         tmp_color_data = np.asarray(bytearray(data.color))
-#         tmp_color_data.shape = (self.im_height,self.im_width,3)
-#         tmp_depth_data = np.asarray(data.depth)
-#         tmp_depth_data.shape = (self.im_height,self.im_width)
-#         tmp_depth_data = tmp_depth_data.astype(float)/10000
-#         tmp_intrinsics = np.asarray(data.intrinsics)
-#         tmp_intrinsics.shape = (3,3)
+        if self.is_recording:
+            tmp_color_image = cv2.cvtColor(tmp_color_data, cv2.COLOR_RGB2BGR)
+            cv2.imwrite(os.path.join(self.recording_directory, '%06d.color.png' % (self.frame_idx)), tmp_color_image)
+            tmp_depth_image = np.round(tmp_depth_data * 10000).astype(np.uint16) # Save depth in 1e-4 meters
+            cv2.imwrite(os.path.join(self.recording_directory, '%06d.depth.png' % (self.frame_idx)), tmp_depth_image)
+            self.frame_idx += 1
+        else:
+            self.frame_idx = 0
 
-#         self.color_data = tmp_color_data
-#         self.depth_data = tmp_depth_data
-#         self.intrinsics = tmp_intrinsics
+        time.sleep(0.1)
 
-#         if self.is_recording:
-#             tmp_color_image = cv2.cvtColor(tmp_color_data, cv2.COLOR_RGB2BGR)
-#             cv2.imwrite(os.path.join(self.recording_directory, '%06d.color.png' % (self.frame_idx)), tmp_color_image)
-#             tmp_depth_image = np.round(tmp_depth_data * 10000).astype(np.uint16) # Save depth in 1e-4 meters
-#             cv2.imwrite(os.path.join(self.recording_directory, '%06d.depth.png' % (self.frame_idx)), tmp_depth_image)
-#             self.frame_idx += 1
-#         else:
-#             self.frame_idx = 0
-
-#         time.sleep(0.1)
-
-#     # Start/stop recording RGB-D video stream
-#     def start_recording(self, directory):
-#         self.recording_directory = directory
-#         self.is_recording = True
-#     def stop_recording(self):
-#         self.is_recording = False
-
+    # Start/stop recording RGB-D video stream
+    def start_recording(self, directory):
+        self.recording_directory = directory
+        self.is_recording = True
+    def stop_recording(self):
+        self.is_recording = False
+'''

@@ -47,7 +47,7 @@ class reactive_net(nn.Module):
         ]))
 
         # Initialize network weights
-        for m in self.named_modules():
+        for m in self.named_modules(): # """Returns an iterator over all modules in the network, yielding both the name of the module as well as the module itself.
             if 'push-' in m[0] or 'grasp-' in m[0]:
                 if isinstance(m[1], nn.Conv2d):
                     nn.init.kaiming_normal(m[1].weight.data)
@@ -69,17 +69,21 @@ class reactive_net(nn.Module):
             for rotate_idx in range(self.num_rotations):
                 rotate_theta = np.radians(rotate_idx*(360/self.num_rotations))
                 
-                # Compute sample grid for rotation BEFORE neural network
+                # Compute 'sample grid(flow field)' for rotation BEFORE neural network
                 affine_mat_before = np.asarray([[np.cos(-rotate_theta), np.sin(-rotate_theta), 0],[-np.sin(-rotate_theta), np.cos(-rotate_theta), 0]])
                 affine_mat_before.shape = (2,3,1)
-                affine_mat_before = torch.from_numpy(affine_mat_before).permute(2,0,1).float()
+                affine_mat_before = torch.from_numpy(affine_mat_before).permute(2,0,1).float() # Permute the dimensions of this tensor.
                 if self.use_cuda:
+                    # torch.nn.functional.**affine_grid**(theta, size, align_corners=None):
+                    #   Generates a 2D or 3D flow field (sampling grid), given a batch of affine matrices theta.
                     flow_grid_before = F.affine_grid(Variable(affine_mat_before, requires_grad=False).cuda(), input_color_data.size())
                 else:
                     flow_grid_before = F.affine_grid(Variable(affine_mat_before, requires_grad=False), input_color_data.size())
                 
                 # Rotate images clockwise
                 if self.use_cuda:
+                    # torch.nn.functional.**grid_sample**(input, grid, mode='bilinear', padding_mode='zeros', align_corners=None):
+                    #   Given an input and a flow-field grid, computes the output using input values and pixel locations from grid.
                     rotate_color = F.grid_sample(Variable(input_color_data, volatile=True).cuda(), flow_grid_before, mode='nearest')
                     rotate_depth = F.grid_sample(Variable(input_depth_data, volatile=True).cuda(), flow_grid_before, mode='nearest')
                 else:
@@ -90,12 +94,14 @@ class reactive_net(nn.Module):
                 interm_push_color_feat = self.push_color_trunk.features(rotate_color)
                 interm_push_depth_feat = self.push_depth_trunk.features(rotate_depth)
                 interm_push_feat = torch.cat((interm_push_color_feat, interm_push_depth_feat), dim=1)
+
                 interm_grasp_color_feat = self.grasp_color_trunk.features(rotate_color)
                 interm_grasp_depth_feat = self.grasp_depth_trunk.features(rotate_depth)
                 interm_grasp_feat = torch.cat((interm_grasp_color_feat, interm_grasp_depth_feat), dim=1)
+                
                 interm_feat.append([interm_push_feat, interm_grasp_feat])
 
-                # Compute sample grid for rotation AFTER branches
+                # Compute 'sample grid' for rotation AFTER branches
                 affine_mat_after = np.asarray([[np.cos(rotate_theta), np.sin(rotate_theta), 0],[-np.sin(rotate_theta), np.cos(rotate_theta), 0]])
                 affine_mat_after.shape = (2,3,1)
                 affine_mat_after = torch.from_numpy(affine_mat_after).permute(2,0,1).float()

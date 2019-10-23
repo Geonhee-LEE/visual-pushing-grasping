@@ -80,7 +80,7 @@ def main(args):
         trainer.preload(logger.transitions_directory)
 
     # Initialize variables for heuristic bootstrapping and exploration probability
-    no_change_count = [2, 2] if not is_testing else [0, 0]
+    no_change_count = [2, 2] if not is_testing else [0, 0] # heuristic_bootstrap, training = [2, 2], test = [0, 0], no_change_count[0]=push, [1]=grasp
     explore_prob = 0.5 if not is_testing else 0.0
 
     # Quick hack for nonlocal memory between threads in Python 2
@@ -135,14 +135,14 @@ def main(args):
                     use_heuristic = True
                 else:
                     use_heuristic = False
-
                     # Get pixel location and rotation with highest affordance prediction from heuristic algorithms (rotation, y, x)
                     if nonlocal_variables['primitive_action'] == 'push':
-                        nonlocal_variables['best_pix_ind'] = np.unravel_index(np.argmax(push_predictions), push_predictions.shape)
+                        nonlocal_variables['best_pix_ind'] = np.unravel_index(np.argmax(push_predictions), push_predictions.shape) # https://stackoverflow.com/questions/48135736/what-is-an-intuitive-explanation-of-np-unravel-index/48136499
                         predicted_value = np.max(push_predictions)
                     elif nonlocal_variables['primitive_action'] == 'grasp':
                         nonlocal_variables['best_pix_ind'] = np.unravel_index(np.argmax(grasp_predictions), grasp_predictions.shape)
                         predicted_value = np.max(grasp_predictions)
+                
                 trainer.use_heuristic_log.append([1 if use_heuristic else 0]) 
                 logger.write_to_log('use-heuristic', trainer.use_heuristic_log)
 
@@ -155,6 +155,7 @@ def main(args):
                 best_rotation_angle = np.deg2rad(nonlocal_variables['best_pix_ind'][0]*(360.0/trainer.model.num_rotations))
                 best_pix_x = nonlocal_variables['best_pix_ind'][2]
                 best_pix_y = nonlocal_variables['best_pix_ind'][1]
+                # 3D position [x, y, depth]
                 primitive_position = [best_pix_x * heightmap_resolution + workspace_limits[0][0], best_pix_y * heightmap_resolution + workspace_limits[1][0], valid_depth_heightmap[best_pix_y][best_pix_x] + workspace_limits[2][0]]
 
                 # If pushing, adjust start position, and make sure z value is safe and not too low
@@ -189,7 +190,7 @@ def main(args):
                 nonlocal_variables['grasp_success'] = False
                 change_detected = False
 
-                # Execute primitive
+                # Execute primitive, robot act!!! 'push' or 'grasp'
                 if nonlocal_variables['primitive_action'] == 'push':
                     nonlocal_variables['push_success'] = robot.push(primitive_position, best_rotation_angle, workspace_limits)
                     print('Push successful: %r' % (nonlocal_variables['push_success']))
@@ -210,7 +211,7 @@ def main(args):
 
     # Start main training/testing loop
     while True:
-        print('\n%s iteration: %d' % ('Testing' if is_testing else 'Training', trainer.iteration))
+        print('\n ##### %s iteration: %d ##### ' % ('Testing' if is_testing else 'Training', trainer.iteration))
         iteration_time_0 = time.time()
 
         # Make sure simulation is still stable (if not, reset simulation)
@@ -391,7 +392,7 @@ def main(args):
 
         trainer.iteration += 1
         iteration_time_1 = time.time()
-        print('Time elapsed: %f' % (iteration_time_1-iteration_time_0))
+        print('##### Time elapsed: %f ##### \n' % (iteration_time_1-iteration_time_0))
 
 
 if __name__ == '__main__':
@@ -428,9 +429,9 @@ if __name__ == '__main__':
     
     # ------ Pre-loading and logging options ------
     parser.add_argument('--load_snapshot', dest='load_snapshot', action='store_true', default=False,                      help='load pre-trained snapshot of model?')
-    parser.add_argument('--snapshot_file', dest='snapshot_file', action='store')
+    parser.add_argument('--snapshot_file', dest='snapshot_file', action='store') # snapshot_file: logs/~/model/snapshot-backup.reinforcement.pth
     parser.add_argument('--continue_logging', dest='continue_logging', action='store_true', default=False,                help='continue logging from previous session?')
-    parser.add_argument('--logging_directory', dest='logging_directory', action='store')
+    parser.add_argument('--logging_directory', dest='logging_directory', action='store') #logging_directory = "/home/geonhee-ml/ur_ws/src/visual-pushing-grasping/logs/2019-10-22.15:44:06/"
     parser.add_argument('--save_visualizations', dest='save_visualizations', action='store_true', default=False,          help='save visualizations of FCN predictions?')
     
     # Run main program with specified arguments

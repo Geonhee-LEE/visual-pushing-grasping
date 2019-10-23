@@ -54,6 +54,7 @@ class Robot(object):
         self.cam_pose = np.loadtxt('real/camera_pose.txt', delimiter=' ')
         self.cam_depth_scale = np.loadtxt('real/camera_depth_scale.txt', delimiter=' ')
 
+    # Get latest RGB-D image
     def get_camera_data(self):
 
         # Get color and depth image from ROS service
@@ -271,14 +272,17 @@ class Robot(object):
     # Primitives ----------------------------------------------------------
 
     def grasp(self, position, heightmap_rotation_angle, workspace_limits):
-        print('Executing: grasp at (%f, %f, %f)' % (position[0], position[1], position[2]))
+        print('>>> Executing: grasp at (%f, %f, %f)' % (position[0], position[1], position[2]))
 
         # Compute tool orientation from heightmap rotation angle
         grasp_orientation = [1.0,0.0]
         if heightmap_rotation_angle > np.pi:
             heightmap_rotation_angle = heightmap_rotation_angle - 2*np.pi
         tool_rotation_angle = heightmap_rotation_angle/2
-        tool_orientation = np.asarray([grasp_orientation[0]*np.cos(tool_rotation_angle) - grasp_orientation[1]*np.sin(tool_rotation_angle), grasp_orientation[0]*np.sin(tool_rotation_angle) + grasp_orientation[1]*np.cos(tool_rotation_angle), 0.0])*np.pi
+        tool_orientation = np.asarray(\
+            [grasp_orientation[0]*np.cos(tool_rotation_angle) - grasp_orientation[1]*np.sin(tool_rotation_angle), \
+            grasp_orientation[0]*np.sin(tool_rotation_angle) + grasp_orientation[1]*np.cos(tool_rotation_angle), \
+                0.0])*np.pi
         tool_orientation_angle = np.linalg.norm(tool_orientation)
         tool_orientation_axis = tool_orientation/tool_orientation_angle
         tool_orientation_rotm = utils.angle2rotm(tool_orientation_angle, tool_orientation_axis, point=None)[:3,:3]
@@ -319,7 +323,7 @@ class Robot(object):
         # Check if gripper is open (grasp might be successful)
         gripper_open = tool_analog_input2 > 0.26
 
-        # # Check if grasp is successful
+        # Check if grasp is successful
         # grasp_success =  tool_analog_input2 > 0.26
 
         home_position = [0.49,0.11,0.03]
@@ -327,7 +331,7 @@ class Robot(object):
 
         # If gripper is open, drop object in bin and check if grasp is successful
         grasp_success = False
-        if gripper_open:
+        if gripper_open: # object grasping status 
 
             # Pre-compute blend radius
             blend_radius = min(abs(bin_position[1] - position[1])/2 - 0.01, 0.2)
@@ -356,7 +360,8 @@ class Robot(object):
                 if abs(actual_tool_pose[1] - bin_position[1]) < 0.2 or all([np.abs(actual_tool_pose[j] - home_position[j]) < self.tool_pose_tolerance[j] for j in range(3)]):
                     break
 
-            # If gripper width did not change before reaching bin location, then object is in grip and grasp is successful
+            # If gripper width did not change before reaching bin location, 
+            # then object is in grip and grasp is successful
             if len(measurements) >= 2:
                 if abs(measurements[0] - measurements[1]) < 0.1:
                     grasp_success = True
@@ -385,9 +390,8 @@ class Robot(object):
 
         return grasp_success
 
-
     def push(self, position, heightmap_rotation_angle, workspace_limits):
-        print('Executing: push at (%f, %f, %f)' % (position[0], position[1], position[2]))
+        print('>>> Executing: push at (%f, %f, %f)' % (position[0], position[1], position[2]))
 
 
         # Compute tool orientation from heightmap rotation angle
@@ -445,7 +449,6 @@ class Robot(object):
         time.sleep(0.5)
 
         return push_success
-
 
     def restart_real(self):
 

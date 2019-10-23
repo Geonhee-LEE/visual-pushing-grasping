@@ -52,7 +52,7 @@ class Trainer(object):
         # Fully convolutional Q network for deep reinforcement learning
         elif self.method == 'reinforcement': 
             self.model = reinforcement_net(self.use_cuda)
-            self.push_rewards = push_rewards
+            self.push_rewards = push_rewards # 1 or 0
             self.future_reward_discount = future_reward_discount
 
             # Initialize Huber loss
@@ -70,7 +70,7 @@ class Trainer(object):
             self.model = self.model.cuda()
         
         # Set model to training mode
-        self.model.train()
+        self.model.train() # or eval()
 
         # Initialize optimizer
         self.optimizer = torch.optim.SGD(self.model.parameters(), lr=1e-4, momentum=0.9, weight_decay=2e-5)
@@ -184,6 +184,7 @@ class Trainer(object):
 
         return push_predictions, grasp_predictions, state_feat
 
+    # Compute training labels
     def get_label_value(self, primitive_action, push_success, grasp_success, change_detected, prev_push_predictions, prev_grasp_predictions, next_color_heightmap, next_depth_heightmap):
 
         if self.method == 'reactive':
@@ -363,6 +364,7 @@ class Trainer(object):
             print('Training loss: %f' % (loss_value))
             self.optimizer.step()
 
+    # For visualize executed primitive, and affordances
     def get_prediction_vis(self, predictions, color_heightmap, best_pix_ind):
 
         canvas = None
@@ -393,6 +395,7 @@ class Trainer(object):
 
         return canvas
 
+    # If Heuristic is on, select 'best_pixel_index'
     def push_heuristic(self, depth_heightmap):
 
         num_rotations = 16
