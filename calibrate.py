@@ -1,5 +1,7 @@
 #!/usr/bin/env python
-
+'''
+http://www.gisdeveloper.co.kr/?p=6868
+'''
 import matplotlib.pyplot as plt
 import numpy as np
 import time
@@ -12,14 +14,15 @@ from mpl_toolkits.mplot3d import Axes3D
 
 # User options (change me)
 # --------------- Setup options ---------------
-tcp_host_ip = '100.127.7.223' # IP and port to robot arm as TCP client (UR5)
+tcp_host_ip = '192.168.0.3' # IP and port to robot arm as TCP client (UR5)
 tcp_port = 30002
-rtc_host_ip = '100.127.7.223' # IP and port to robot arm as real-time client (UR5)
+rtc_host_ip = '192.168.0.3' # IP and port to robot arm as real-time client (UR5)
 rtc_port = 30003
-workspace_limits = np.asarray([[0.3, 0.748], [0.05, 0.4], [-0.2, -0.1]]) # Cols: min max, Rows: x y z (define workspace limits in robot coordinates)
+#workspace_limits = np.asarray([[-0.5, -0.25], [-0.35, 0.35], [0.3, 0.40]]) # Cols: min max, Rows: x y z (define workspace limits in robot coordinates)
+workspace_limits = np.asarray([[-0.724, -0.276], [-0.224, 0.224], [0.3, 0.40]])  # Cols: min max, Rows: x y z (define workspace limits in robot coordinates)
 calib_grid_step = 0.05
-checkerboard_offset_from_tool = [0,-0.13,0.02]
-tool_orientation = [-np.pi/2,0,0] # [0,-2.22,2.22] # [2.22,2.22,0]
+checkerboard_offset_from_tool = [0,-0.01,-0.1]  # [0,-0.13,0.02]
+tool_orientation = [2.22,2.22,0] # [0,-2.22,2.22] # [2.22,2.22,0]
 # ---------------------------------------------
 
 
@@ -33,6 +36,14 @@ calib_grid_x.shape = (num_calib_grid_pts,1)
 calib_grid_y.shape = (num_calib_grid_pts,1)
 calib_grid_z.shape = (num_calib_grid_pts,1)
 calib_grid_pts = np.concatenate((calib_grid_x, calib_grid_y, calib_grid_z), axis=1)
+'''
+print ("calib_grid_pts", calib_grid_pts)
+array([[-0.5       , -0.35      ,  0.3       ],
+       [-0.5       , -0.35      ,  0.35      ],
+       [-0.5       , -0.35      ,  0.4       ],
+       [-0.45      , -0.35      ,  0.3       ],
+        ...
+'''
 
 measured_pts = []
 observed_pts = []
@@ -43,17 +54,19 @@ print('Connecting to robot...')
 robot = Robot(False, None, None, workspace_limits,
               tcp_host_ip, tcp_port, rtc_host_ip, rtc_port,
               False, None, None)
-robot.open_gripper()
+robot.close_gripper()
 
 # Slow down robot
 robot.joint_acc = 1.4
 robot.joint_vel = 1.05
 
 # Make robot gripper point upwards
-robot.move_joints([-np.pi, -np.pi/2, np.pi/2, 0, np.pi/2, np.pi])
+#print('upwards...')
+#robot.move_joints([-np.pi, -np.pi/2, np.pi/2, 0, np.pi/2, np.pi])
 
 # Move robot to each calibration point in workspace
 print('Collecting data...')
+
 for calib_pt_idx in range(num_calib_grid_pts):
     tool_position = calib_grid_pts[calib_pt_idx,:]
     robot.move_to(tool_position, tool_orientation)
@@ -86,13 +99,14 @@ for calib_pt_idx in range(num_calib_grid_pts):
         observed_pix.append(checkerboard_pix)
 
         # Draw and display the corners
-        # vis = cv2.drawChessboardCorners(robot.camera.color_data, checkerboard_size, corners_refined, checkerboard_found)
+        #vis = cv2.drawChessboardCorners(robot.camera.color_data, checkerboard_size, corners_refined, checkerboard_found)
         vis = cv2.drawChessboardCorners(bgr_color_data, (1,1), corners_refined[4,:,:], checkerboard_found)
         cv2.imwrite('%06d.png' % len(measured_pts), vis)
         cv2.imshow('Calibration',vis)
         cv2.waitKey(10)
 
 # Move robot back to home pose
+print('go_home...')
 robot.go_home()
 
 measured_pts = np.asarray(measured_pts)
@@ -154,34 +168,34 @@ print('Done.')
 
 # DEBUG CODE -----------------------------------------------------------------------------------
 
-# np.savetxt('measured_pts.txt', np.asarray(measured_pts), delimiter=' ')
-# np.savetxt('observed_pts.txt', np.asarray(observed_pts), delimiter=' ')
-# np.savetxt('observed_pix.txt', np.asarray(observed_pix), delimiter=' ')
-# measured_pts = np.loadtxt('measured_pts.txt', delimiter=' ')
-# observed_pts = np.loadtxt('observed_pts.txt', delimiter=' ')
-# observed_pix = np.loadtxt('observed_pix.txt', delimiter=' ')
+np.savetxt('measured_pts.txt', np.asarray(measured_pts), delimiter=' ')
+np.savetxt('observed_pts.txt', np.asarray(observed_pts), delimiter=' ')
+np.savetxt('observed_pix.txt', np.asarray(observed_pix), delimiter=' ')
+measured_pts = np.loadtxt('measured_pts.txt', delimiter=' ')
+observed_pts = np.loadtxt('observed_pts.txt', delimiter=' ')
+observed_pix = np.loadtxt('observed_pix.txt', delimiter=' ')
 
-# fig = plt.figure()
-# ax = fig.add_subplot(111, projection='3d')
-# ax.scatter(measured_pts[:,0],measured_pts[:,1],measured_pts[:,2], c='blue')
+fig = plt.figure()
+ax = fig.add_subplot(111, projection='3d')
+ax.scatter(measured_pts[:,0],measured_pts[:,1],measured_pts[:,2], c='blue')
 
-# print(camera_depth_offset)
-# R, t = get_rigid_transform(np.asarray(measured_pts), np.asarray(observed_pts))
-# t.shape = (3,1)
-# camera_pose = np.concatenate((np.concatenate((R, t), axis=1),np.array([[0, 0, 0, 1]])), axis=0)
-# camera2robot = np.linalg.inv(camera_pose)
-# t_observed_pts = np.transpose(np.dot(camera2robot[0:3,0:3],np.transpose(observed_pts)) + np.tile(camera2robot[0:3,3:],(1,observed_pts.shape[0])))
+print(camera_depth_offset)
+R, t = get_rigid_transform(np.asarray(measured_pts), np.asarray(observed_pts))
+t.shape = (3,1)
+camera_pose = np.concatenate((np.concatenate((R, t), axis=1),np.array([[0, 0, 0, 1]])), axis=0)
+camera2robot = np.linalg.inv(camera_pose)
+t_observed_pts = np.transpose(np.dot(camera2robot[0:3,0:3],np.transpose(observed_pts)) + np.tile(camera2robot[0:3,3:],(1,observed_pts.shape[0])))
 
-# ax.scatter(t_observed_pts[:,0],t_observed_pts[:,1],t_observed_pts[:,2], c='red')
+ax.scatter(t_observed_pts[:,0],t_observed_pts[:,1],t_observed_pts[:,2], c='red')
 
-# new_observed_pts = observed_pts.copy()
-# new_observed_pts[:,2] = new_observed_pts[:,2] * camera_depth_offset[0]
-# R, t = get_rigid_transform(np.asarray(measured_pts), np.asarray(new_observed_pts))
-# t.shape = (3,1)
-# camera_pose = np.concatenate((np.concatenate((R, t), axis=1),np.array([[0, 0, 0, 1]])), axis=0)
-# camera2robot = np.linalg.inv(camera_pose)
-# t_new_observed_pts = np.transpose(np.dot(camera2robot[0:3,0:3],np.transpose(new_observed_pts)) + np.tile(camera2robot[0:3,3:],(1,new_observed_pts.shape[0])))
+new_observed_pts = observed_pts.copy()
+new_observed_pts[:,2] = new_observed_pts[:,2] * camera_depth_offset[0]
+R, t = get_rigid_transform(np.asarray(measured_pts), np.asarray(new_observed_pts))
+t.shape = (3,1)
+camera_pose = np.concatenate((np.concatenate((R, t), axis=1),np.array([[0, 0, 0, 1]])), axis=0)
+camera2robot = np.linalg.inv(camera_pose)
+t_new_observed_pts = np.transpose(np.dot(camera2robot[0:3,0:3],np.transpose(new_observed_pts)) + np.tile(camera2robot[0:3,3:],(1,new_observed_pts.shape[0])))
 
-# ax.scatter(t_new_observed_pts[:,0],t_new_observed_pts[:,1],t_new_observed_pts[:,2], c='green')
+ax.scatter(t_new_observed_pts[:,0],t_new_observed_pts[:,1],t_new_observed_pts[:,2], c='green')
 
-# plt.show()
+plt.show()
