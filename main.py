@@ -30,7 +30,9 @@ def main(args):
     if is_sim:
         workspace_limits = np.asarray([[-0.724, -0.276], [-0.224, 0.224], [-0.0001, 0.4]]) # Cols: min max, Rows: x y z (define workspace limits in robot coordinates)
     else:
-        workspace_limits = np.asarray([[0.3, 0.748], [-0.224, 0.224], [-0.255, -0.1]]) # Cols: min max, Rows: x y z (define workspace limits in robot coordinates)
+        #workspace_limits = np.asarray([[-0.5, -0.25], [-0.35, 0.35], [0.3, 0.40]])  # Cols: min max, Rows: x y z (define workspace limits in robot coordinates)
+        #workspace_limits = np.asarray([[-0.724, -0.276], [-0.224, 0.224], [0.3, 0.50]])  # Cols: min max, Rows: x y z (define workspace limits in robot coordinates)
+        workspace_limits = np.asarray([[-0.724, -0.276], [-0.3, 0.148], [0.3, 0.45]])
     heightmap_resolution = args.heightmap_resolution # Meters per pixel of heightmap
     random_seed = args.random_seed
     force_cpu = args.force_cpu
@@ -68,7 +70,7 @@ def main(args):
 
     # Initialize trainer
     trainer = Trainer(method, push_rewards, future_reward_discount,
-                      is_testing, load_snapshot, snapshot_file, force_cpu)
+                      is_testing, load_snapshot, snapshot_file)
 
     # Initialize data logger
     logger = Logger(continue_logging, logging_directory)
@@ -96,11 +98,11 @@ def main(args):
     def process_actions():
         while True:
             if nonlocal_variables['executing_action']:
-
+                print('>>>>>>> executing_action start >>>>>>>>>>')                
                 # Determine whether grasping or pushing should be executed based on network predictions
                 best_push_conf = np.max(push_predictions)
                 best_grasp_conf = np.max(grasp_predictions)
-                print('Primitive confidence scores: %f (push), %f (grasp)' % (best_push_conf, best_grasp_conf))
+                print('> Primitive confidence scores: %f (push), %f (grasp)' % (best_push_conf, best_grasp_conf))
                 nonlocal_variables['primitive_action'] = 'grasp'
                 explore_actions = False
                 if not grasp_only:
@@ -112,28 +114,29 @@ def main(args):
                             nonlocal_variables['primitive_action'] = 'push'
                     explore_actions = np.random.uniform() < explore_prob
                     if explore_actions: # Exploitation (do best action) vs exploration (do other action)
-                        print('Strategy: explore (exploration probability: %f)' % (explore_prob))
+                        print('> Strategy: explore (exploration probability: %f)' % (explore_prob))
                         nonlocal_variables['primitive_action'] = 'push' if np.random.randint(0,2) == 0 else 'grasp'
                     else:
-                        print('Strategy: exploit (exploration probability: %f)' % (explore_prob))
+                        print('> Strategy: exploit (exploration probability: %f)' % (explore_prob))
                 trainer.is_exploit_log.append([0 if explore_actions else 1]) 
                 logger.write_to_log('is-exploit', trainer.is_exploit_log)
 
                 # If heuristic bootstrapping is enabled: if change has not been detected more than 2 times, execute heuristic algorithm to detect grasps/pushes
                 # NOTE: typically not necessary and can reduce final performance.
                 if heuristic_bootstrap and nonlocal_variables['primitive_action'] == 'push' and no_change_count[0] >= 2:
-                    print('Change not detected for more than two pushes. Running heuristic pushing.')
+                    print('> Change not detected for more than two pushes. Running heuristic pushing.')
                     nonlocal_variables['best_pix_ind'] = trainer.push_heuristic(valid_depth_heightmap)
                     no_change_count[0] = 0
                     predicted_value = push_predictions[nonlocal_variables['best_pix_ind']]
                     use_heuristic = True
                 elif heuristic_bootstrap and nonlocal_variables['primitive_action'] == 'grasp' and no_change_count[1] >= 2:
-                    print('Change not detected for more than two grasps. Running heuristic grasping.')
+                    print('> Change not detected for more than two grasps. Running heuristic grasping.')
                     nonlocal_variables['best_pix_ind'] = trainer.grasp_heuristic(valid_depth_heightmap)
                     no_change_count[1] = 0
                     predicted_value = grasp_predictions[nonlocal_variables['best_pix_ind']]
                     use_heuristic = True
                 else:
+                    print('> Running not heuristic action.')
                     use_heuristic = False
                     # Get pixel location and rotation with highest affordance prediction from heuristic algorithms (rotation, y, x)
                     if nonlocal_variables['primitive_action'] == 'push':
@@ -150,17 +153,17 @@ def main(args):
                 trainer.predicted_value_log.append([predicted_value]) 
                 logger.write_to_log('predicted-value', trainer.predicted_value_log)
 
-                # Compute 3D position of pixel
-                print('Action: %s at (%d, %d, %d)' % (nonlocal_variables['primitive_action'], nonlocal_variables['best_pix_ind'][0], nonlocal_variables['best_pix_ind'][1], nonlocal_variables['best_pix_ind'][2]))
+                # Compute 3D position of pixel 
+                print('> Action: %s at (%d, %d, %d) of pixel' % (nonlocal_variables['primitive_action'], nonlocal_variables['best_pix_ind'][0], nonlocal_variables['best_pix_ind'][1], nonlocal_variables['best_pix_ind'][2]))
                 best_rotation_angle = np.deg2rad(nonlocal_variables['best_pix_ind'][0]*(360.0/trainer.model.num_rotations))
                 best_pix_x = nonlocal_variables['best_pix_ind'][2]
                 best_pix_y = nonlocal_variables['best_pix_ind'][1]
-                # 3D position [x, y, depth]
-                primitive_position = [best_pix_x * heightmap_resolution + workspace_limits[0][0], best_pix_y * heightmap_resolution + workspace_limits[1][0], valid_depth_heightmap[best_pix_y][best_pix_x] + workspace_limits[2][0]]
 
+                # 3D position [x, y, depth] of cartesian coordinate
+                primitive_position = [best_pix_x * heightmap_resolution + workspace_limits[0][0], best_pix_y * heightmap_resolution + workspace_limits[1][0], valid_depth_heightmap[best_pix_y][best_pix_x] + workspace_limits[2][0]]
                 # If pushing, adjust start position, and make sure z value is safe and not too low
                 if nonlocal_variables['primitive_action'] == 'push': # or nonlocal_variables['primitive_action'] == 'place':
-                    finger_width = 0.02
+                    finger_width = 0.144
                     safe_kernel_width = int(np.round((finger_width/2)/heightmap_resolution))
                     local_region = valid_depth_heightmap[max(best_pix_y - safe_kernel_width, 0):min(best_pix_y + safe_kernel_width + 1, valid_depth_heightmap.shape[0]), max(best_pix_x - safe_kernel_width, 0):min(best_pix_x + safe_kernel_width + 1, valid_depth_heightmap.shape[1])]
                     if local_region.size == 0:
@@ -168,7 +171,7 @@ def main(args):
                     else:
                         safe_z_position = np.max(local_region) + workspace_limits[2][0]
                     primitive_position[2] = safe_z_position
-
+                
                 # Save executed primitive
                 if nonlocal_variables['primitive_action'] == 'push':
                     trainer.executed_action_log.append([0, nonlocal_variables['best_pix_ind'][0], nonlocal_variables['best_pix_ind'][1], nonlocal_variables['best_pix_ind'][2]]) # 0 - push
@@ -181,9 +184,11 @@ def main(args):
                     push_pred_vis = trainer.get_prediction_vis(push_predictions, color_heightmap, nonlocal_variables['best_pix_ind'])
                     logger.save_visualizations(trainer.iteration, push_pred_vis, 'push')
                     cv2.imwrite('visualization.push.png', push_pred_vis)
+                    cv2.imshow( "Display push_pred_vis", push_pred_vis );  
                     grasp_pred_vis = trainer.get_prediction_vis(grasp_predictions, color_heightmap, nonlocal_variables['best_pix_ind'])
                     logger.save_visualizations(trainer.iteration, grasp_pred_vis, 'grasp')
                     cv2.imwrite('visualization.grasp.png', grasp_pred_vis)
+                    cv2.imshow( "Display grasp_pred_vis", grasp_pred_vis );  
 
                 # Initialize variables that influence reward
                 nonlocal_variables['push_success'] = False
@@ -191,14 +196,18 @@ def main(args):
                 change_detected = False
 
                 # Execute primitive, robot act!!! 'push' or 'grasp'
+                print('> Action: %s at (%f, %f, %f) of 3D' % (nonlocal_variables['primitive_action'], primitive_position[0], primitive_position[1], primitive_position[2]))
+                print('> best_rotation_angle:  %f of 3D' % (best_rotation_angle))
+
                 if nonlocal_variables['primitive_action'] == 'push':
                     nonlocal_variables['push_success'] = robot.push(primitive_position, best_rotation_angle, workspace_limits)
-                    print('Push successful: %r' % (nonlocal_variables['push_success']))
+                    print('> Push successful: %r' % (nonlocal_variables['push_success']))
                 elif nonlocal_variables['primitive_action'] == 'grasp':
                     nonlocal_variables['grasp_success'] = robot.grasp(primitive_position, best_rotation_angle, workspace_limits)
-                    print('Grasp successful: %r' % (nonlocal_variables['grasp_success']))
+                    print('> Grasp successful: %r' % (nonlocal_variables['grasp_success']))
 
                 nonlocal_variables['executing_action'] = False
+                print('>>>>>>> executing_action end >>>>>>>>>>')   
 
             time.sleep(0.01)
     action_thread = threading.Thread(target=process_actions)
@@ -233,9 +242,13 @@ def main(args):
         # Reset simulation or pause real-world training if table is empty
         stuff_count = np.zeros(valid_depth_heightmap.shape)
         stuff_count[valid_depth_heightmap > 0.02] = 1
+        print ("stuff_count: ", np.sum(stuff_count))
+        
+        #empty_threshold = 300
         empty_threshold = 300
         if is_sim and is_testing:
             empty_threshold = 10  
+        # If table is empty, start restart_real()
         if np.sum(stuff_count) < empty_threshold or (is_sim and no_change_count[0] + no_change_count[1] > 10):
             no_change_count = [0, 0]
             print('Not enough stuff on the table (value: %d)! Flipping over bin of objects...' % (np.sum(stuff_count)))
@@ -247,15 +260,16 @@ def main(args):
                 exit_called = True # Exit after training thread (backprop and saving labels)
             continue
 
+        # If test number is over max_test_trials, exit_called is True 
         if not exit_called: 
-
             # Run forward pass with network to get affordances
+            print("Run forward pass with network to get affordances!!!!!!")
             push_predictions, grasp_predictions, state_feat = trainer.forward(color_heightmap, valid_depth_heightmap, is_volatile=True)
 
             # Execute best primitive action on robot in another thread
             nonlocal_variables['executing_action'] = True
 
-        # Run training iteration in current thread (aka training thread)
+        # Run training iteration in current thread (aka "training thread")
         if 'prev_color_img' in locals():
 
             # Detect changes
