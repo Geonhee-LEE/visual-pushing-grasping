@@ -274,7 +274,7 @@ class reinforcement_net(nn.Module):
             rotate_idx = specific_rotation
             rotate_theta = np.radians(rotate_idx*(360/self.num_rotations))
             
-            # Compute sample grid for rotation BEFORE branches
+            # Compute "sample grid" for rotation BEFORE branches
             affine_mat_before = np.asarray([[np.cos(-rotate_theta), np.sin(-rotate_theta), 0],[-np.sin(-rotate_theta), np.cos(-rotate_theta), 0]])
             affine_mat_before.shape = (2,3,1)
             affine_mat_before = torch.from_numpy(affine_mat_before).permute(2,0,1).float()
@@ -300,10 +300,10 @@ class reinforcement_net(nn.Module):
             interm_grasp_feat = torch.cat((interm_grasp_color_feat, interm_grasp_depth_feat), dim=1)
             self.interm_feat.append([interm_push_feat, interm_grasp_feat])
             
-            # Compute sample grid for rotation AFTER branches
+            # Compute "sample grid" for rotation AFTER branches
             affine_mat_after = np.asarray([[np.cos(rotate_theta), np.sin(rotate_theta), 0],[-np.sin(rotate_theta), np.cos(rotate_theta), 0]])
             affine_mat_after.shape = (2,3,1)
-            affine_mat_after = torch.from_numpy(affine_mat_after).permute(2,0,1).float()
+            affine_mat_after = torch.from_numpy(affine_mat_after).permute(2,0,1).float() # shape = (3, 1, 2)
             if self.use_cuda:
                 flow_grid_after = F.affine_grid(Variable(affine_mat_after, requires_grad=False).cuda(), interm_push_feat.data.size())
             else:

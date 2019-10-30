@@ -60,7 +60,6 @@ class Trainer(object):
 
         # Load pre-trained model
         if load_snapshot:
-
             # PyTorch v0.4 removes periods in state dict keys, but no backwards compatibility :(
             loaded_snapshot_state_dict = torch.load(snapshot_file)
             loaded_snapshot_state_dict = OrderedDict([(k.replace('conv.1','conv1'), v) if k.find('conv.1') else (k, v) for k, v in loaded_snapshot_state_dict.items()])
@@ -93,7 +92,6 @@ class Trainer(object):
         self.is_exploit_log = []
         self.clearance_log = []
 
-
     # Pre-load execution info and RL variables
     def preload(self, transitions_directory):
         self.executed_action_log = np.loadtxt(os.path.join(transitions_directory, 'executed-action.log.txt'), delimiter=' ')
@@ -124,7 +122,6 @@ class Trainer(object):
         self.clearance_log.shape = (self.clearance_log.shape[0],1)
         self.clearance_log = self.clearance_log.tolist()
 
-
     # Compute forward pass through model to compute affordances/Q
     def forward(self, color_heightmap, depth_heightmap, is_volatile=False, specific_rotation=-1):
 
@@ -143,6 +140,7 @@ class Trainer(object):
         color_heightmap_2x_g.shape = (color_heightmap_2x_g.shape[0], color_heightmap_2x_g.shape[1], 1)
         color_heightmap_2x_b =  np.pad(color_heightmap_2x[:,:,2], padding_width, 'constant', constant_values=0)
         color_heightmap_2x_b.shape = (color_heightmap_2x_b.shape[0], color_heightmap_2x_b.shape[1], 1)
+        # 2x heightmap of color, depth
         color_heightmap_2x = np.concatenate((color_heightmap_2x_r, color_heightmap_2x_g, color_heightmap_2x_b), axis=2)
         depth_heightmap_2x =  np.pad(depth_heightmap_2x, padding_width, 'constant', constant_values=0)
 
@@ -186,14 +184,18 @@ class Trainer(object):
             # Return Q values (and remove extra padding)
             for rotate_idx in range(len(output_prob)):
                 if rotate_idx == 0:
-                    push_predictions = output_prob[rotate_idx][0].cpu().data.numpy()[:,0,int(padding_width/2):int(color_heightmap_2x.shape[0]/2 - padding_width/2),int(padding_width/2):int(color_heightmap_2x.shape[0]/2 - padding_width/2)]
+                    push_predictions = output_prob[rotate_idx][0].cpu().data.numpy()\
+                        [   :,  \
+                            0,  \
+                            int(padding_width/2):int(color_heightmap_2x.shape[0]/2 - padding_width/2), \
+                            int(padding_width/2):int(color_heightmap_2x.shape[0]/2 - padding_width/2) 
+                        ]
                     grasp_predictions = output_prob[rotate_idx][1].cpu().data.numpy()[:,0,int(padding_width/2):int(color_heightmap_2x.shape[0]/2 - padding_width/2),int(padding_width/2):int(color_heightmap_2x.shape[0]/2 - padding_width/2)]
                 else:
                     push_predictions = np.concatenate((push_predictions, output_prob[rotate_idx][0].cpu().data.numpy()[:,0,int(padding_width/2):int(color_heightmap_2x.shape[0]/2 - padding_width/2),int(padding_width/2):int(color_heightmap_2x.shape[0]/2 - padding_width/2)]), axis=0)
                     grasp_predictions = np.concatenate((grasp_predictions, output_prob[rotate_idx][1].cpu().data.numpy()[:,0,int(padding_width/2):int(color_heightmap_2x.shape[0]/2 - padding_width/2),int(padding_width/2):int(color_heightmap_2x.shape[0]/2 - padding_width/2)]), axis=0)
 
         return push_predictions, grasp_predictions, state_feat
-
 
     def get_label_value(self, primitive_action, push_success, grasp_success, change_detected, prev_push_predictions, prev_grasp_predictions, next_color_heightmap, next_depth_heightmap):
 
@@ -239,7 +241,6 @@ class Trainer(object):
             expected_reward = current_reward + self.future_reward_discount * future_reward
             print('Expected reward: %f + %f x %f = %f' % (current_reward, self.future_reward_discount, future_reward, expected_reward))
             return expected_reward, current_reward
-
 
     # Compute labels and backpropagate
     def backprop(self, color_heightmap, depth_heightmap, primitive_action, best_pix_ind, label_value):
@@ -395,7 +396,6 @@ class Trainer(object):
             print('Training loss: %f' % (loss_value))
             self.optimizer.step()
 
-
     def get_prediction_vis(self, predictions, color_heightmap, best_pix_ind):
 
         canvas = None
@@ -426,7 +426,6 @@ class Trainer(object):
 
         return canvas
 
-
     def push_heuristic(self, depth_heightmap):
 
         num_rotations = 16
@@ -448,7 +447,6 @@ class Trainer(object):
 
         best_pix_ind = np.unravel_index(np.argmax(push_predictions), push_predictions.shape)
         return best_pix_ind
-
 
     def grasp_heuristic(self, depth_heightmap):
 

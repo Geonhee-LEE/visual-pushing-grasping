@@ -19,10 +19,11 @@ tcp_port = 30002
 rtc_host_ip = '192.168.0.3' # IP and port to robot arm as real-time client (UR5)
 rtc_port = 30003
 #workspace_limits = np.asarray([[-0.5, -0.25], [-0.35, 0.35], [0.3, 0.40]]) # Cols: min max, Rows: x y z (define workspace limits in robot coordinates)
-workspace_limits = np.asarray([[-0.724, -0.276], [-0.224, 0.224], [0.3, 0.40]])  # Cols: min max, Rows: x y z (define workspace limits in robot coordinates)
+#workspace_limits = np.asarray([[-0.724, -0.276], [-0.224, 0.224], [0.3, 0.40]])  # Cols: min max, Rows: x y z (define workspace limits in robot coordinates)
+workspace_limits = np.asarray([[-0.724, -0.276], [-0.3, 0.148], [0.2, 0.35]])  # Cols: min max, Rows: x y z (define workspace limits in robot coordinates)
 calib_grid_step = 0.05
-checkerboard_offset_from_tool = [0,-0.01,-0.1]  # [0,-0.13,0.02]
-tool_orientation = [2.22,2.22,0] # [0,-2.22,2.22] # [2.22,2.22,0]
+checkerboard_offset_from_tool = [-0.105, -0.0, -0.0]  # [0,-0.13,0.02]
+tool_orientation = [2.22, 0, -2.22] # [0,-2.22,2.22] # [2.22,2.22,0]
 # ---------------------------------------------
 
 
@@ -36,8 +37,10 @@ calib_grid_x.shape = (num_calib_grid_pts,1)
 calib_grid_y.shape = (num_calib_grid_pts,1)
 calib_grid_z.shape = (num_calib_grid_pts,1)
 calib_grid_pts = np.concatenate((calib_grid_x, calib_grid_y, calib_grid_z), axis=1)
-'''
 print ("calib_grid_pts", calib_grid_pts)
+'''
+workspace_limits = np.asarray([[-0.724, -0.276], [-0.224, 0.224], [0.3, 0.40]])
+tool_orientation = [2.22,2.22,0]
 array([[-0.5       , -0.35      ,  0.3       ],
        [-0.5       , -0.35      ,  0.35      ],
        [-0.5       , -0.35      ,  0.4       ],
@@ -54,7 +57,7 @@ print('Connecting to robot...')
 robot = Robot(False, None, None, workspace_limits,
               tcp_host_ip, tcp_port, rtc_host_ip, rtc_port,
               False, None, None)
-robot.close_gripper()
+robot.pos_gripper(128)
 
 # Slow down robot
 robot.joint_acc = 1.4
