@@ -32,7 +32,8 @@ def main(args):
     else:
         #workspace_limits = np.asarray([[-0.5, -0.25], [-0.35, 0.35], [0.3, 0.40]])  # Cols: min max, Rows: x y z (define workspace limits in robot coordinates)
         #workspace_limits = np.asarray([[-0.724, -0.276], [-0.224, 0.224], [0.3, 0.50]])  # Cols: min max, Rows: x y z (define workspace limits in robot coordinates)
-        workspace_limits = np.asarray([[-0.724, -0.276], [-0.3, 0.148], [0.3, 0.45]])
+        workspace_limits = np.asarray([[-0.724, -0.276], [-0.3, 0.148], [0.2, 0.35]])
+        
     heightmap_resolution = args.heightmap_resolution # Meters per pixel of heightmap
     random_seed = args.random_seed
     force_cpu = args.force_cpu
@@ -154,13 +155,15 @@ def main(args):
                 logger.write_to_log('predicted-value', trainer.predicted_value_log)
 
                 # Compute 3D position of pixel 
-                print('> Action: %s at (%d, %d, %d) of pixel' % (nonlocal_variables['primitive_action'], nonlocal_variables['best_pix_ind'][0], nonlocal_variables['best_pix_ind'][1], nonlocal_variables['best_pix_ind'][2]))
+                print('> Action: %s at (best_pix_ind, best_pix_y, best_pix_x) = (%d, %d, %d) of pixel' % (nonlocal_variables['primitive_action'], nonlocal_variables['best_pix_ind'][0], nonlocal_variables['best_pix_ind'][1], nonlocal_variables['best_pix_ind'][2]))
                 best_rotation_angle = np.deg2rad(nonlocal_variables['best_pix_ind'][0]*(360.0/trainer.model.num_rotations))
                 best_pix_x = nonlocal_variables['best_pix_ind'][2]
                 best_pix_y = nonlocal_variables['best_pix_ind'][1]
 
-                # 3D position [x, y, depth] of cartesian coordinate
-                primitive_position = [best_pix_x * heightmap_resolution + workspace_limits[0][0], best_pix_y * heightmap_resolution + workspace_limits[1][0], valid_depth_heightmap[best_pix_y][best_pix_x] + workspace_limits[2][0]]
+                # 3D position [x, y, depth] of cartesian coordinate, conveted from pixel
+                primitive_position = [best_pix_x * heightmap_resolution + workspace_limits[0][0], \
+                                        best_pix_y * heightmap_resolution + workspace_limits[1][0], \
+                                        valid_depth_heightmap[best_pix_y][best_pix_x] + workspace_limits[2][0]]
                 # If pushing, adjust start position, and make sure z value is safe and not too low
                 if nonlocal_variables['primitive_action'] == 'push': # or nonlocal_variables['primitive_action'] == 'place':
                     finger_width = 0.144
@@ -194,7 +197,7 @@ def main(args):
                 change_detected = False
 
                 # Execute primitive, robot act!!! 'push' or 'grasp'
-                print('> Action: %s at (%f, %f, %f) of 3D' % (nonlocal_variables['primitive_action'], primitive_position[0], primitive_position[1], primitive_position[2]))
+                print('> Action: %s at (x, y, z) = (%f, %f, %f) of 3D' % (nonlocal_variables['primitive_action'], primitive_position[0], primitive_position[1], primitive_position[2]))
                 print('> best_rotation_angle:  %f of 3D' % (best_rotation_angle))
 
                 if nonlocal_variables['primitive_action'] == 'push':
@@ -224,6 +227,8 @@ def main(args):
         # Make sure simulation is still stable (if not, reset simulation)
         if is_sim: robot.check_sim()
 
+        robot.go_wait_point()
+        time.sleep(3)
         # Get latest RGB-D image
         color_img, depth_img = robot.get_camera_data()
         depth_img = depth_img * robot.cam_depth_scale # Apply depth scale from calibration
@@ -249,6 +254,7 @@ def main(args):
         # If table is empty, start restart_real()
         if np.sum(stuff_count) < empty_threshold or (is_sim and no_change_count[0] + no_change_count[1] > 10):
             no_change_count = [0, 0]
+            cv2.imwrite('valid_depth_heightmap.png', valid_depth_heightmap)
             if is_sim:
                 print('Not enough objects in view (value: %d)! Repositioning objects.' % (np.sum(stuff_count)))
                 robot.restart_sim()
@@ -283,17 +289,21 @@ def main(args):
             depth_diff[depth_diff > 0.3] = 0
             depth_diff[depth_diff < 0.01] = 0
             depth_diff[depth_diff > 0] = 1 # sensing changed pixel when 0.01 < depth < 0.3 include
+
             change_threshold = 300
             change_value = np.sum(depth_diff)
-            change_detected = change_value > change_threshold or prev_grasp_success
-            print('Change detected: %r (value: %d)' % (change_detected, change_value))
+            change_detected = change_value > change_threshold or prev_grasp_success # if success
+            print('(Depth img) Change detected: %r (value: %d)' % (change_detected, change_value))
 
+            # If current depth img is changed from previous depth img after acting 
             if change_detected:
+                # Initialization 
                 if prev_primitive_action == 'push':
                     no_change_count[0] = 0
                 elif prev_primitive_action == 'grasp':
                     no_change_count[1] = 0
             else:
+                # If change is small, sweep cnt +1
                 if prev_primitive_action == 'push':
                     no_change_count[0] += 1
                 elif prev_primitive_action == 'grasp':

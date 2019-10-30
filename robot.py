@@ -115,12 +115,18 @@ class Robot(object):
             # self.home_joint_config = [-np.pi, -np.pi/2, np.pi/2, -np.pi/2, -np.pi/2, 0]
             #self.home_joint_config = [-(0.0/360.0)*2*np.pi, -(90/360.0)*2*np.pi, (90/360.0)*2*np.pi, \
             #    -(90/360.0)*2*np.pi, -(90.0/360.0)*2*np.pi, (0/360.0)*2*np.pi]
-            self.home_joint_config = [-(0.0/360.0)*2*np.pi, -(120/360.0)*2*np.pi, (110/360.0)*2*np.pi, \
-                -(80/360.0)*2*np.pi, -(90.0/360.0)*2*np.pi, (0/360.0)*2*np.pi]
+            self.wait_joint_config = [-(50.0/360.0)*2*np.pi, -(120/360.0)*2*np.pi, (110/360.0)*2*np.pi, \
+                -(80/360.0)*2*np.pi, (90.0/360.0)*2*np.pi, (90/360.0)*2*np.pi]
             
             # calibration home joint configuration
             #self.home_joint_config = [-(0.0/360.0)*2*np.pi, -(90/360.0)*2*np.pi, (90/360.0)*2*np.pi, \
             #                    -(0/360.0)*2*np.pi, (90.0/360.0)*2*np.pi, -(90/360.0)*2*np.pi]
+            self.home_joint_config = [-(0.0/360.0)*2*np.pi, -(90/360.0)*2*np.pi, (90/360.0)*2*np.pi, \
+                                -(90/360.0)*2*np.pi, -(90.0/360.0)*2*np.pi, (90/360.0)*2*np.pi]
+            
+            # calibration home joint configuration
+            self.action_joint_config = [-(0.0/360.0)*2*np.pi, -(90/360.0)*2*np.pi, (90/360.0)*2*np.pi, \
+                                -(90/360.0)*2*np.pi, -(90.0/360.0)*2*np.pi, (90/360.0)*2*np.pi]
 
             # Default joint speed configuration
             self.joint_acc = 8 # Safe: 1.4
@@ -540,6 +546,7 @@ class Robot(object):
             gripper_fully_closed = True
 
         else:
+            print ("close gripper")
             rob = urx.Robot("192.168.0.3")
             robotiqgrip = Robotiq_Two_Finger_Gripper(rob)
             time.sleep(0.25)
@@ -574,11 +581,13 @@ class Robot(object):
                 sim_ret, gripper_joint_position = vrep.simxGetJointPosition(self.sim_client, RG2_gripper_handle, vrep.simx_opmode_blocking)
 
         else:
+            print ("open gripper")
             rob = urx.Robot("192.168.0.3")
             robotiqgrip = Robotiq_Two_Finger_Gripper(rob)
             time.sleep(0.25)
             robotiqgrip.close_gripper()
             rob.close()
+            time.sleep(0.25)
             gripper_fully_closed = True
             '''
             self.tcp_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -606,11 +615,13 @@ class Robot(object):
                 sim_ret, gripper_joint_position = vrep.simxGetJointPosition(self.sim_client, RG2_gripper_handle, vrep.simx_opmode_blocking)
 
         else:
+            print ("pos gripper, value:", val)
             rob = urx.Robot("192.168.0.3")
             robotiqgrip = Robotiq_Two_Finger_Gripper(rob)
             time.sleep(0.25)
             robotiqgrip.gripper_action(128)
             rob.close()
+            time.sleep(0.25)
             gripper_fully_closed = True
             '''
             self.tcp_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -750,18 +761,26 @@ class Robot(object):
         # Block until robot reaches home state
         state_data = self.tcp_socket.recv(2048)
         actual_joint_positions = self.parse_tcp_state_data(state_data, 'joint_data')
-        print ("actual_joint_positions: ", actual_joint_positions)
+        #print ("actual_joint_positions: ", actual_joint_positions)
         while not all([np.abs(actual_joint_positions[j] - joint_configuration[j]) < self.joint_tolerance for j in range(6)]):
             state_data = self.tcp_socket.recv(2048)
             actual_joint_positions = self.parse_tcp_state_data(state_data, 'joint_data')
             time.sleep(0.01)
 
-        print ("tcp_socket.close(): ")
+        #print ("tcp_socket.close(): ")
         self.tcp_socket.close()
 
     def go_home(self):
 
         self.move_joints(self.home_joint_config)
+
+    def go_wait_point(self):
+
+        self.move_joints(self.wait_joint_config)
+
+    def go_action_point(self):
+
+        self.move_joints(self.action_joint_config)
 
     # Note: must be preceded by close_gripper()
     def check_grasp(self):
@@ -835,6 +854,7 @@ class Robot(object):
 
         else:
 
+            self.go_action_point()
             # Compute tool orientation from heightmap rotation angle
             grasp_orientation = [1.0,0.0] 
             print("heightmap_rotation_angle: ", heightmap_rotation_angle * 180 / 3.14)
@@ -855,13 +875,17 @@ class Robot(object):
             # Attempt grasp
             print ("Attempt grasp")
             position = np.asarray(position).copy()
-            position[2] = max(position[2] - 0.05, workspace_limits[2][0])
+            safty_threshold = 0.15
+            position[2] = max(position[2] - 0.05, workspace_limits[2][0]+ safty_threshold)
 
+            print ("Attempt grasp, robotiqgrip.open_gripper()")
             rob = urx.Robot("192.168.0.3")
             robotiqgrip = Robotiq_Two_Finger_Gripper(rob)
-            time.sleep(0.25)
+            time.sleep(0.5)
             robotiqgrip.open_gripper()
             rob.close()
+            time.sleep(0.5)
+            print ("Attempt grasp, tcp_socket.connect")
 
             self.tcp_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             self.tcp_socket.connect((self.tcp_host_ip, self.tcp_port))
@@ -877,10 +901,10 @@ class Robot(object):
 
             rob = urx.Robot("192.168.0.3")
             robotiqgrip = Robotiq_Two_Finger_Gripper(rob)
-            time.sleep(0.25)
+            time.sleep(0.5)
             robotiqgrip.close_gripper()
             rob.close()
-            time.sleep(0.25)
+            time.sleep(0.5)
 
             # Block until robot reaches target tool position and gripper fingers have stopped moving
             print ("Block until robot reaches target tool position and gripper fingers have stopped moving")
@@ -903,6 +927,7 @@ class Robot(object):
                 tool_analog_input2 = 0.5
                 pass
             else:
+                tool_analog_input2 = 0
                 print ("Failed to reaches target tool position")
                 
             # Check if gripper is open (grasp might be successful)
@@ -911,8 +936,8 @@ class Robot(object):
             # # Check if grasp is successful
             # grasp_success =  tool_analog_input2 > 0.26
 
-            home_position = [-0.5,0.0,0.5]
-            bin_position = [-0.5,-0.3,0.3]
+            home_position = [-0.5, 0.0, 0.5]
+            bin_position = [-0.5, 0.1, 0.5]
 
             # If gripper is open, drop object in bin and check if grasp is successful
             grasp_success = False
@@ -957,7 +982,7 @@ class Robot(object):
                         break
                 '''
                 measurements = []
-                user_in = raw_input('Please input whether robot reaches near bin location, y or n: ')
+                user_in = raw_input('Please input whether to measure gripper width, y or n: ')
                 print ("user_in:", user_in)
                 if user_in == "y" or user_in == "yes":
                     tool_analog_input2 = 0.5
@@ -965,7 +990,7 @@ class Robot(object):
                     measurements.append(tool_analog_input2)
                     pass
                 else:
-                    print ("Failed to reaches near bin location")
+                    print ("Failed to grip")
 
                 # If gripper width did not change before reaching bin location, then object is in grip and grasp is successful
                 if len(measurements) >= 2:
@@ -1064,9 +1089,10 @@ class Robot(object):
             push_success = True
 
         else:
-
+            self.go_action_point()
+            time.sleep(5)
             # Compute tool orientation from heightmap rotation angle
-            push_orientation = [1.0,0.0]
+            push_orientation = [1.0, 0.0]
             tool_rotation_angle = heightmap_rotation_angle/2
             tool_orientation = np.asarray([push_orientation[0]*np.cos(tool_rotation_angle) - push_orientation[1]*np.sin(tool_rotation_angle), push_orientation[0]*np.sin(tool_rotation_angle) + push_orientation[1]*np.cos(tool_rotation_angle), 0.0])*np.pi
             tool_orientation_angle = np.linalg.norm(tool_orientation)
@@ -1091,15 +1117,19 @@ class Robot(object):
             position = np.asarray(position).copy()
             position[0] = min(max(position[0], workspace_limits[0][0]), workspace_limits[0][1])
             position[1] = min(max(position[1], workspace_limits[1][0]), workspace_limits[1][1])
-            position[2] = max(position[2] + 0.005, workspace_limits[2][0] + 0.005) # Add buffer to surface
+            #position[2] = max(position[2] + 0.1, workspace_limits[2][0] + 0.1) # Add buffer to surface
+            position[2] = max(position[2] + 0.15, workspace_limits[2][0] + 0.15) # Add buffer to surface
 
-            home_position = [-0.5,0.0,0.5]
+            home_position = [-0.2, -0.10, 0.6]
 
             # Attempt push
+            self.pos_gripper(128)
+            time.sleep(0.5)
+            print ("pushing....")
             self.tcp_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             self.tcp_socket.connect((self.tcp_host_ip, self.tcp_port))
             tcp_command = "def process():\n"
-            tcp_command += " set_digital_out(8,True)\n"
+            #tcp_command += " set_digital_out(8,True)\n"
             tcp_command += " movej(p[%f,%f,%f,%f,%f,%f],a=%f,v=%f,t=0,r=0.09)\n" % (position[0],position[1],position[2]+0.1,tool_orientation[0],tool_orientation[1],tool_orientation[2],self.joint_acc*0.5,self.joint_vel*0.5)
             tcp_command += " movej(p[%f,%f,%f,%f,%f,%f],a=%f,v=%f,t=0,r=0.00)\n" % (position[0],position[1],position[2],tool_orientation[0],tool_orientation[1],tool_orientation[2],self.joint_acc*0.1,self.joint_vel*0.1)
             tcp_command += " movej(p[%f,%f,%f,%f,%f,%f],a=%f,v=%f,t=0,r=0.00)\n" % (push_endpoint[0],push_endpoint[1],push_endpoint[2],tilted_tool_orientation[0],tilted_tool_orientation[1],tilted_tool_orientation[2],self.joint_acc*0.1,self.joint_vel*0.1)
@@ -1118,11 +1148,12 @@ class Robot(object):
                     break
             push_success = True
             time.sleep(0.5)
+            print ("pushing end....")
 
         return push_success
 
     def restart_real(self):
-
+        '''
         # Compute tool orientation from heightmap rotation angle
         grasp_orientation = [1.0,0.0]
         tool_rotation_angle = -np.pi/4
@@ -1153,7 +1184,7 @@ class Robot(object):
 
         # Block until robot reaches box grabbing position and gripper fingers have stopped moving
         print ("Block until robot reaches box grabbing position and gripper fingers have stopped moving")
-        '''
+        
         state_data = self.get_state()
         tool_analog_input2 = self.parse_tcp_state_data(state_data, 'tool_data')
 
@@ -1164,7 +1195,7 @@ class Robot(object):
             if tool_analog_input2 < 3.7 and (abs(new_tool_analog_input2 - tool_analog_input2) < 0.01) and all([np.abs(actual_tool_pose[j] - box_grab_position[j]) < self.tool_pose_tolerance[j] for j in range(3)]):
                 break
             tool_analog_input2 = new_tool_analog_input2
-        '''
+ 
         user_in = raw_input('Please input whether grasping success, y or n: ')
         print ("user_in:", user_in)
         if user_in == "y" or user_in == "yes":
@@ -1175,10 +1206,10 @@ class Robot(object):
         # Move to box release position
         print ("Move to box release position")
         # box_release_position = [0.5,0.08,-0.12]
-        box_release_position = [-0.4, 0.2, 0.5]
+        box_release_position = [-0.3, 0.1, 0.5]
         #home_position = [0.49,0.11,0.03]
         #home_position = [-0.5, -0, 0.4]
-        home_position = [-0.3,0.0,0.5]
+        home_position = [-0.3, 0.0, 0.5]
         self.tcp_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.tcp_socket.connect((self.tcp_host_ip, self.tcp_port))
         tcp_command = "def process():\n"
@@ -1196,7 +1227,7 @@ class Robot(object):
         self.tcp_socket.close()
 
         # Block until robot reaches home position
-        '''
+        
         state_data = self.get_state()
         tool_analog_input2 = self.parse_tcp_state_data(state_data, 'tool_data')
         while True:
@@ -1206,9 +1237,10 @@ class Robot(object):
             if tool_analog_input2 > 3.0 and (abs(new_tool_analog_input2 - tool_analog_input2) < 0.01) and all([np.abs(actual_tool_pose[j] - home_position[j]) < self.tool_pose_tolerance[j] for j in range(3)]):
                 break
             tool_analog_input2 = new_tool_analog_input2
+         
         '''
 
-        user_in = raw_input('Please input whether grasping success, y or n: ')
+        user_in = raw_input('Please input whether to restart real, y or n: ')
         print ("user_in:", user_in)
         if user_in == "y" or user_in == "yes":
             pass
