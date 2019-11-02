@@ -102,6 +102,66 @@ class URRobot(object):
             force += i**2
         return force**0.5
 
+    # For get analog about gripper    
+    def set_analog_out_to_pos(self):
+        prog = "def analogToPos():\n"
+        prog += '\tsocket_close("gripper_socket")\n'
+        prog += '\tsocket_open("127.0.0.1", 63352, "gripper_socket")\n'
+        prog += '\trq_pos = socket_get_var("POS","gripper_socket")\n'
+        prog += '\tsync()\n'
+        prog += "\tset_standard_analog_out(0, rq_pos / 255)\n"
+        prog += "\ttextmsg(rq_pos)\n"
+        prog += "end"
+        self.send_program(prog)
+
+    # if detect, digital_out[2] is on, if not, digital_out[0] is on
+    def get_object_detect(self):
+        prog = "def objectDetectDigitalOn():\n"
+        prog += '\tsocket_close("gripper_socket")\n'
+        prog += '\tsocket_open("127.0.0.1", 63352, "gripper_socket")\n'
+        prog += '\tsocket_send_string("GET OBJ", "gripper_socket")\n'
+        prog += '\tsync()\n'
+        prog += '\tglobal msg = socket_read_byte_list(1, "gripper_socket")\n'
+        prog += '\tsync()\n'
+        prog += '\tsleep(1.0)\n'
+        prog += '\tset_digital_out(51-msg[1],True)\n'
+        prog += '\ttextmsg(51-msg[1])\n'
+        prog += '\tsleep(1.0)\n'
+        prog += "end"
+        self.send_program(prog)
+
+    def digital_output_reset(self):
+        prog = "def digitalReset():\n"
+        prog += '\tsocket_close("gripper_socket")\n'
+        prog += '\tsocket_open("127.0.0.1", 63352, "gripper_socket")\n'
+        prog += '\tsleep(1.0)\n'
+        prog += '\tset_digital_out(0, False)\n'
+        prog += '\tsleep(1.0)\n'
+        prog += '\tset_digital_out(1, False)\n'
+        prog += '\tsleep(1.0)\n'
+        prog += '\tset_digital_out(2, False)\n'
+        prog += '\tsleep(1.0)\n'
+        prog += "end"
+        self.send_program(prog)
+
+
+    # For get analog about gripper    
+    def gripper_act(self):
+        prog = "def gripperAct():\n"
+        prog += '\tsocket_close("gripper_socket")\n'
+        prog += '\tsocket_open("127.0.0.1", 63352, "gripper_socket")\n'
+        prog += '\tsocket_send_string("rq_activate()", "gripper_socket")\n'
+        prog += "end"
+        self.send_program(prog)
+
+    def gripper_open(self):
+        prog = "def gripperOpen():\n"
+        prog += '\tsocket_close("gripper_socket")\n'
+        prog += '\tsocket_open("127.0.0.1", 63352, "gripper_socket")\n'
+        prog += '\tsocket_set_var("POS", 128, "gripper_socket")\n'
+        prog += "end"
+        self.send_program(prog)
+
     def set_tcp(self, tcp):
         """
         set robot flange to tool tip transformation
