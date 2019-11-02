@@ -145,23 +145,6 @@ class URRobot(object):
         self.send_program(prog)
 
 
-    # For get analog about gripper    
-    def gripper_act(self):
-        prog = "def gripperAct():\n"
-        prog += '\tsocket_close("gripper_socket")\n'
-        prog += '\tsocket_open("127.0.0.1", 63352, "gripper_socket")\n'
-        prog += '\tsocket_send_string("rq_activate()", "gripper_socket")\n'
-        prog += "end"
-        self.send_program(prog)
-
-    def gripper_open(self):
-        prog = "def gripperOpen():\n"
-        prog += '\tsocket_close("gripper_socket")\n'
-        prog += '\tsocket_open("127.0.0.1", 63352, "gripper_socket")\n'
-        prog += '\tsocket_set_var("POS", 128, "gripper_socket")\n'
-        prog += "end"
-        self.send_program(prog)
-
     def set_tcp(self, tcp):
         """
         set robot flange to tool tip transformation
