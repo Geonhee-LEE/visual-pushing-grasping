@@ -87,15 +87,44 @@ class RobotiqScript(URScript):
             rq_script = f.read()
             self.add_header_to_program(rq_script)
 
-    def _rq_get_var(self, var_name, nbytes):
-        self._socket_send_string("GET {}".format(var_name))
-        self._socket_read_byte_list(nbytes)
-
     def _get_gripper_fault(self):
         self._rq_get_var(FLT, 2)
 
     def _get_gripper_object(self):
         self._rq_get_var(OBJ, 1)
+
+    def _rq_is_motion_complete(self):
+        gOBJ = self._rq_get_var(OBJ, 1)
+        print ("gOBJ: ", gOBJ)
+
+        if self.is_OBJ_gripper_at_position(gOBJ):
+            return True
+        else:
+            return False
+
+    def _rq_get_var(self, var_name, nbytes):
+        self._socket_send_string("GET {}".format(var_name), self.socket_name)
+        var_value = self._socket_read_byte_list(nbytes, self.socket_name)
+        var_value2 = self._socket_read_byte_list(nbytes, self.socket_name)
+        print ("var_value: ", var_value)
+
+        print ("var_value2: ", var_value2)
+
+        self._sync()
+        return var_value
+
+    def is_OBJ_gripper_at_position(self, list_of_bytes):
+        
+        # list length is not 1
+        if (list_of_bytes[0] != 1):
+            print ("list_of_bytes[0] :", list_of_bytes[0])
+            return False
+        # byte is '3'?
+        elif (list_of_bytes[1] == 51):
+            print ("list_of_bytes[1] :", list_of_bytes[1])
+            return True
+        else:
+            return False
 
     def _get_gripper_status(self):
         self._rq_get_var(STA, 1)
@@ -214,3 +243,9 @@ class Robotiq_Two_Finger_Gripper(object):
 
     def close_gripper(self):
         self.gripper_action(255)
+
+    def get_grip_status(self):
+        urscript = self._get_new_urscript()
+        print ("urscript: ", urscript)
+        print (urscript._rq_is_motion_complete())
+

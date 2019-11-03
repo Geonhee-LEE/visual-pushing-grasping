@@ -144,6 +144,15 @@ class URRobot(object):
         prog += "end"
         self.send_program(prog)
 
+    def get_digital_out(self):
+        prog = "def getDigitalOut():\n"
+        prog += '\tsocket_close("gripper_socket")\n'
+        prog += '\tsocket_open("127.0.0.1", 63352, "gripper_socket")\n'
+        prog += '\tsync()\n'
+        prog += '\get_digital_out(3)\n'
+        prog += "end"
+        self.send_program(prog)
+
 
     def set_tcp(self, tcp):
         """
