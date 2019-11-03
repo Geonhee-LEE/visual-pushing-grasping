@@ -643,8 +643,7 @@ class Robot(object):
             actual_tool_pose = [x,y,z,Rx,Ry,Rz]
             return actual_tool_pose
 
-        def parse_tool_data():
-            print ("parse_tool_data ")            
+        def parse_tool_data():            
             return self.check_motion_complete()
 
         parse_functions = {'joint_data' : parse_joint_data, 'cartesian_info' : parse_cartesian_info, 'tool_data' : parse_tool_data}
@@ -652,7 +651,6 @@ class Robot(object):
         return parse_functions[subpackage]()
     
     def check_motion_complete(self):
-        print ("check_motion_complete ")
         rob = urx.Robot("192.168.0.3")
         robotiqgrip = Robotiq_Two_Finger_Gripper(rob)
         time.sleep(0.25)
@@ -661,7 +659,6 @@ class Robot(object):
         
         # Check motion colplete through digital out pin[2] 
         motion_complete_flag = rob.get_digital_out(2)
-        print ("motion_complete_flag: ", motion_complete_flag)
         rob.digital_output_reset()
         time.sleep(2)
         return motion_complete_flag
@@ -1027,9 +1024,9 @@ class Robot(object):
             # Compute tool orientation from heightmap rotation angle
             grasp_orientation = [1.0,0.0] 
             print("heightmap_rotation_angle: ", heightmap_rotation_angle * 180 / 3.14)
-            if heightmap_rotation_angle > np.pi:
+            if heightmap_rotation_angle-90 > np.pi:
                 heightmap_rotation_angle = heightmap_rotation_angle - 2*np.pi
-            tool_rotation_angle = heightmap_rotation_angle/2
+            tool_rotation_angle = (heightmap_rotation_angle-90)/2
             tool_orientation = np.asarray([grasp_orientation[0]*np.cos(tool_rotation_angle) - grasp_orientation[1]*np.sin(tool_rotation_angle), grasp_orientation[0]*np.sin(tool_rotation_angle) + grasp_orientation[1]*np.cos(tool_rotation_angle), 0.0])*np.pi
             tool_orientation_angle = np.linalg.norm(tool_orientation)
             tool_orientation_axis = tool_orientation/tool_orientation_angle
@@ -1044,7 +1041,7 @@ class Robot(object):
             # Attempt grasp
             print ("Attempt grasp")
             position = np.asarray(position).copy()
-            safty_threshold = 0.15
+            safty_threshold = 0.10
             position[2] = max(position[2] - 0.05, workspace_limits[2][0]+ safty_threshold) # z of 3D coordinate
 
             print ("Attempt grasp, robotiqgrip.open_gripper()")
@@ -1102,7 +1099,7 @@ class Robot(object):
                 # Pre-compute blend radius
                 #blend_radius = min(abs(bin_position[1] - position[1])/2 - 0.01, 0.2)
                 blend_radius = 0
-                
+
                 # Attempt placing
                 print ("Attempt placing")
                 self.tcp_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -1137,6 +1134,7 @@ class Robot(object):
                 self.tcp_socket.send(str.encode(tcp_command))
                 self.tcp_socket.close()
                 time.sleep(3)
+
                 while True:
                     actual_tool_pose = self.parse_tcp_data('cartesian_info')
                                             
