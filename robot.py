@@ -143,22 +143,17 @@ class Robot(object):
             self.tool_pose_tolerance = [0.002,0.002,0.002,0.01,0.01,0.01]
 
             # Move robot to home pose
-            print ("init close_gripper")
             self.close_gripper()
-            print ("init go_home")
             self.go_home()
 
-            print ("init cam")
             # Fetch RGB-D data from RealSense camera
             from real.camera import Camera
             self.camera = Camera()
             self.cam_intrinsics = self.camera.intrinsics
-            print ("read camera data")
 
             # Load camera pose (from running calibrate.py), intrinsics and depth scale
             self.cam_pose = np.loadtxt('real/camera_pose.txt', delimiter=' ')
             self.cam_depth_scale = np.loadtxt('real/camera_depth_scale.txt', delimiter=' ')
-            print ("load camera data")
 
     def setup_sim_camera(self):
 
@@ -1022,10 +1017,9 @@ class Robot(object):
             tilted_tool_orientation = tilted_tool_orientation_axis_angle[0]*np.asarray(tilted_tool_orientation_axis_angle[1:4])
 
             # Attempt grasp
-            print ("Attempt grasp")
             position = np.asarray(position).copy()
             safty_threshold = 0.1
-            position[2] = max(position[2] - 0.05, workspace_limits[2][0]+ safty_threshold) # z of 3D coordinate
+            position[2] = max(position[2] , workspace_limits[2][0]+ safty_threshold) # z of 3D coordinate
 
             self.open_gripper()
 
@@ -1041,7 +1035,6 @@ class Robot(object):
             self.tcp_socket.close()
 
             # Block until robot reaches target tool position and gripper fingers have stopped moving
-            print ("Block until robot reaches target tool position and gripper fingers have stopped moving")
             timeout_t0 = time.time()
             while True:
                 actual_tool_pose = self.parse_tcp_data('cartesian_info')
@@ -1062,17 +1055,15 @@ class Robot(object):
             # If gripper is open, drop object in bin and check if grasp is successful
             grasp_success = False
             if gripper_open: # Success justification.
-
                 # Pre-compute blend radius
                 #blend_radius = min(abs(bin_position[1] - position[1])/2 - 0.01, 0.2)
                 blend_radius = 0
 
                 # Attempt placing
-                print ("Attempt placing")
                 self.tcp_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                 self.tcp_socket.connect((self.tcp_host_ip, self.tcp_port))
                 tcp_command = "def placeToBin():\n"
-                tcp_command += " movej(p[%f,%f,%f,%f,%f,%f],a=%f,v=%f,t=0,r=%f)\n" % (position[0], position[1], position[2] + 0.2, tool_orientation[0], tool_orientation[1], 0.0, self.joint_acc*0.25, self.joint_vel*0.25, blend_radius)
+                tcp_command += " movej(p[%f,%f,%f,%f,%f,%f],a=%f,v=%f,t=0,r=%f)\n" % (position[0], position[1], position[2] + 0.15, tool_orientation[0], tool_orientation[1], 0.0, self.joint_acc*0.25, self.joint_vel*0.25, blend_radius)
                 tcp_command += ' sleep(0.15)\n'
                 #tcp_command += " movej(p[%f,%f,%f,%f,%f,%f],a=%f,v=%f,t=0,r=%f)\n" % (bin_position[0],bin_position[1],bin_position[2],tilted_tool_orientation[0],tilted_tool_orientation[1],tilted_tool_orientation[2],self.joint_acc,self.joint_vel,blend_radius)
                 tcp_command += " movej(p[%f,%f,%f,%f,%f,%f],a=%f,v=%f,t=0,r=%f)\n" % (bin_position[0],bin_position[1],bin_position[2],tool_orientation[0],tool_orientation[1],0.0,self.joint_acc,self.joint_vel,blend_radius)
@@ -1084,8 +1075,6 @@ class Robot(object):
                     actual_tool_pose = self.parse_tcp_data('cartesian_info')                   
                     if all([np.abs(actual_tool_pose[j] - bin_position[j]) < self.tool_pose_tolerance[j] for j in range(3)]):
                         break
-                    else:
-                        print ("Failed to move to bin location")
 
                 # Measure gripper width until robot reaches near bin location
                 grasp_success = self.check_grasp()
@@ -1109,8 +1098,6 @@ class Robot(object):
                                             
                     if all([np.abs(actual_tool_pose[j] - home_position[j]) < self.tool_pose_tolerance[j] for j in range(3)]):
                         break
-                    else:
-                        print ("Failed to move to home location")
                 
 
             else: # grasping is fail
@@ -1128,15 +1115,10 @@ class Robot(object):
 
                 # Block until robot reaches home location
                 while True:
-                    actual_tool_pose = self.parse_tcp_data('cartesian_info')
-                                            
+                    actual_tool_pose = self.parse_tcp_data('cartesian_info')                                            
                     if all([np.abs(actual_tool_pose[j] - home_position[j]) < self.tool_pose_tolerance[j] for j in range(3)]):
                         break
-                    else:
-                        print ("Failed to move to home location")
 
-
-            
         return grasp_success
 
     def push(self, position, heightmap_rotation_angle, workspace_limits):
