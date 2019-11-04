@@ -46,7 +46,9 @@ def get_heightmap(color_img, depth_img, cam_intrinsics, cam_pose, workspace_limi
     surface_pts, color_pts = get_pointcloud(color_img, depth_img, cam_intrinsics)
 
     # Transform 3D point cloud from camera coordinates to robot coordinates
-    surface_pts = np.transpose(np.dot(cam_pose[0:3,0:3],np.transpose(surface_pts)) + np.tile(cam_pose[0:3,3:],(1,surface_pts.shape[0])))
+    surface_pts = np.transpose(np.dot(cam_pose[0:3,0:3],    \
+                                np.transpose(surface_pts)) + np.tile(cam_pose[0:3,3:],  \
+                                (1,surface_pts.shape[0])))
 
     # Sort surface points by z value
     sort_z_ind = np.argsort(surface_pts[:,2])
@@ -69,9 +71,12 @@ def get_heightmap(color_img, depth_img, cam_intrinsics, cam_pose, workspace_limi
     color_heightmap_g[heightmap_pix_y,heightmap_pix_x] = color_pts[:,[1]]
     color_heightmap_b[heightmap_pix_y,heightmap_pix_x] = color_pts[:,[2]]
     color_heightmap = np.concatenate((color_heightmap_r, color_heightmap_g, color_heightmap_b), axis=2)
-    depth_heightmap[heightmap_pix_y,heightmap_pix_x] = surface_pts[:,2]
+    depth_heightmap[heightmap_pix_y, heightmap_pix_x] = surface_pts[:,2]
+    
     z_bottom = workspace_limits[2][0]
-    depth_heightmap = depth_heightmap - z_bottom
+    depth_heightmap_threshold = 0.2
+    depth_heightmap = depth_heightmap - z_bottom + depth_heightmap_threshold
+    #print ("depth_heightmap: ", depth_heightmap)
     depth_heightmap[depth_heightmap < 0] = 0
     depth_heightmap[depth_heightmap == -z_bottom] = np.nan
 
@@ -120,6 +125,13 @@ def get_affordance_vis(grasp_affordances, input_images, num_rotations, best_pix_
             affordance_vis = (0.5*cv2.cvtColor(input_image_vis, cv2.COLOR_RGB2BGR) + 0.5*affordance_vis).astype(np.uint8)
             if rotate_idx == best_pix_ind[0]:
                 affordance_vis = cv2.circle(affordance_vis, (int(best_pix_ind[2]), int(best_pix_ind[1])), 7, (0,0,255), 2)
+
+                thickness = 2 
+                white = (255, 255, 255)
+                location = (int(best_pix_ind[2]), int(best_pix_ind[1]))
+                font = cv2.FONT_HERSHEY_SCRIPT_SIMPLEX  # hand-writing style font
+                fontScale = 3.5
+                affordance_vis = cv2.putText(affordance_vis, 'Action pt', location, font, fontScale, white, thickness)
             if tmp_row_vis is None:
                 tmp_row_vis = affordance_vis
             else:

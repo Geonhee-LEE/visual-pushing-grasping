@@ -206,8 +206,8 @@ int main(int argc, char * argv[]) try {
 
         // Find and colorize the depth data
         //rs2::frame depth_colorized = color_map(aligned_depth);  
-        rs2::frame depth_colorized = aligned_depth.apply_filter(color_map);
-        
+	rs2::frame depth_colorized = aligned_depth.apply_filter(color_map);
+
         int depth_size = aligned_depth.get_width()*aligned_depth.get_height()*aligned_depth.get_bytes_per_pixel();
         realsense_server.update_buffer((unsigned char*)aligned_depth.get_data(), 10*4, depth_size);
 
