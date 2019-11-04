@@ -129,8 +129,8 @@ class Robot(object):
                                 -(90/360.0)*2*np.pi, -(90.0/360.0)*2*np.pi, (90/360.0)*2*np.pi]
 
             # Default joint speed configuration
-            self.joint_acc = 8 # Safe: 1.4
-            self.joint_vel = 3 # Safe: 1.05
+            self.joint_acc = 4 # Safe: 1.4 #8
+            self.joint_vel = 1.5 # Safe: 1.05 #3
 
             # Joint tolerance for blocking calls
             self.joint_tolerance = 0.01
@@ -655,12 +655,12 @@ class Robot(object):
         robotiqgrip = Robotiq_Two_Finger_Gripper(rob)
         time.sleep(0.25)
         rob.get_object_detect()
-        time.sleep(3) # need to dalay time for execute get_object_detect()
+        time.sleep(0.3) # need to dalay time for execute get_object_detect()
         
         # Check motion colplete through digital out pin[2] 
         motion_complete_flag = rob.get_digital_out(2)
         rob.digital_output_reset()
-        time.sleep(2)
+        time.sleep(0.25)
         return motion_complete_flag
 
     def parse_rtc_state_data(self, state_data):
@@ -697,7 +697,6 @@ class Robot(object):
             gripper_fully_closed = True
 
         else:
-            print ("close gripper")
             rob = urx.Robot("192.168.0.3")
             robotiqgrip = Robotiq_Two_Finger_Gripper(rob)
             time.sleep(0.25)
@@ -732,18 +731,11 @@ class Robot(object):
                 sim_ret, gripper_joint_position = vrep.simxGetJointPosition(self.sim_client, RG2_gripper_handle, vrep.simx_opmode_blocking)
 
         else:
-            print ("open gripper")
             rob = urx.Robot("192.168.0.3")
             robotiqgrip = Robotiq_Two_Finger_Gripper(rob)
             time.sleep(0.25)
-            robotiqgrip.close_gripper()
+            robotiqgrip.open_gripper()
             rob.close()
-            time.sleep(0.25)
-            if async:
-                gripper_fully_closed = True
-            else:
-                time.sleep(1.5)
-                gripper_fully_closed =  self.check_grasp()
             '''
             self.tcp_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             self.tcp_socket.connect((self.tcp_host_ip, self.tcp_port))
@@ -828,7 +820,6 @@ class Robot(object):
             tcp_command = "movel(p[%f,%f,%f,%f,%f,%f],a=%f,v=%f,t=0,r=0)\n" % (tool_position[0],tool_position[1],tool_position[2],tool_orientation[0],tool_orientation[1],tool_orientation[2],self.tool_acc,self.tool_vel)
             self.tcp_socket.send(str.encode(tcp_command))
             self.tcp_socket.close()
-            time.sleep(3)
 
             # Block until robot reaches target tool position
             print("Block until robot reaches target tool position")
@@ -914,27 +905,19 @@ class Robot(object):
         return execute_success
 
     def move_joints(self, joint_configuration):
-        print ("move_joints")
         self.tcp_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.tcp_socket.connect((self.tcp_host_ip, self.tcp_port))
         tcp_command = "movej([%f" % joint_configuration[0]
         for joint_idx in range(1,6):
             tcp_command = tcp_command + (",%f" % joint_configuration[joint_idx])
-        tcp_command = tcp_command + "],a=%f,v=%f)\n" % (self.joint_acc, self.joint_vel)
+        tcp_command = tcp_command + "],a=%f,v=%f)\n" % (self.joint_acc+1.0, self.joint_vel+3.0)
         self.tcp_socket.send(str.encode(tcp_command))
 
         # Block until robot reaches home state
-        #state_data = self.tcp_socket.recv(2048)
-        #actual_joint_positions = self.parse_tcp_state_data(state_data, 'joint_data')
         actual_joint_positions = self.parse_tcp_data('joint_data')
-        #print ("actual_joint_positions: ", actual_joint_positions)
         while not all([np.abs(actual_joint_positions[j] - joint_configuration[j]) < self.joint_tolerance for j in range(6)]):
-            #state_data = self.tcp_socket.recv(2048)
-            #actual_joint_positions = self.parse_tcp_state_data(state_data, 'joint_data')
             actual_joint_positions = self.parse_tcp_data('joint_data')
             time.sleep(0.01)
-
-        #print ("tcp_socket.close(): ")
         self.tcp_socket.close()
 
     def go_home(self):
@@ -953,7 +936,7 @@ class Robot(object):
     def check_grasp(self):
         #state_data = self.get_state()
         #motion_complete = self.parse_tcp_state_data(state_data, 'tool_data')
-        motion_complete = self.parse_tcp_data('tool_data')
+        motion_complete = self.check_motion_complete()
         return motion_complete #tool_analog_input2 > 0.26
 
     # Primitives ----------------------------------------------------------
@@ -1041,29 +1024,21 @@ class Robot(object):
             # Attempt grasp
             print ("Attempt grasp")
             position = np.asarray(position).copy()
-            safty_threshold = 0.10
+            safty_threshold = 0.1
             position[2] = max(position[2] - 0.05, workspace_limits[2][0]+ safty_threshold) # z of 3D coordinate
 
-            print ("Attempt grasp, robotiqgrip.open_gripper()")
-            rob = urx.Robot("192.168.0.3")
-            robotiqgrip = Robotiq_Two_Finger_Gripper(rob)
-            time.sleep(0.25)
-            robotiqgrip.open_gripper()
-            rob.close()
-            time.sleep(0.25)
+            self.open_gripper()
 
-            print ("Attempt grasp, tcp_socket.connect")
             self.tcp_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             self.tcp_socket.connect((self.tcp_host_ip, self.tcp_port))
             tcp_command = "def moveToGraspPt():\n"
             # Target grasping point
-            tcp_command += " movej(p[%f,%f,%f,%f,%f,%f],a=%f,v=%f,t=0,r=0.09)\n" % (position[0],position[1],position[2]+0.1, tool_orientation[0], tool_orientation[1], 0.0,self.joint_acc*0.5,self.joint_vel*0.5)
+            tcp_command += " movej(p[%f,%f,%f,%f,%f,%f],a=%f,v=%f,t=0,r=0.05)\n" % (position[0],position[1],position[2]+0.1, tool_orientation[0], tool_orientation[1], 0.0,self.joint_acc*0.25,self.joint_vel*0.25)
             # Move Down
-            tcp_command += " movej(p[%f,%f,%f,%f,%f,%f],a=%f,v=%f,t=0,r=0.00)\n" % (position[0],position[1],position[2], tool_orientation[0], tool_orientation[1], 0.0,self.joint_acc*0.1,self.joint_vel*0.1)
+            tcp_command += " movej(p[%f,%f,%f,%f,%f,%f],a=%f,v=%f,t=0,r=0.00)\n" % (position[0],position[1],position[2], tool_orientation[0], tool_orientation[1], 0.0,self.joint_acc*0.2,self.joint_vel*0.2)
             tcp_command += "end\n"
             self.tcp_socket.send(str.encode(tcp_command))
             self.tcp_socket.close()
-            time.sleep(5)
 
             # Block until robot reaches target tool position and gripper fingers have stopped moving
             print ("Block until robot reaches target tool position and gripper fingers have stopped moving")
@@ -1072,25 +1047,17 @@ class Robot(object):
                 actual_tool_pose = self.parse_tcp_data('cartesian_info')
                 timeout_t1 = time.time()
                 if all([np.abs(actual_tool_pose[j] - position[j]) < self.tool_pose_tolerance[j] for j in range(3)]) \
-                    or (timeout_t1 - timeout_t0) > 5:
+                    or (timeout_t1 - timeout_t0) > 10:
                     break
-                else:
-                    print ("Failed to block until robot reaches target tool position and gripper fingers have stopped moving")
-
-            print ("Attempt grasp, robotiqgrip.close()")
-            rob = urx.Robot("192.168.0.3")
-            robotiqgrip = Robotiq_Two_Finger_Gripper(rob)
-            time.sleep(0.25)
-            robotiqgrip.close_gripper()
-            rob.close()
-            time.sleep(0.25)
+                
+            self.close_gripper()
 
             # Check if gripper is open (grasp might be successful)
             gripper_open = self.check_grasp()
             
             # # Check if grasp is successful
+            bin_position = [-0.5, 0.1, 0.6]
             home_position = [-0.5, 0.0, 0.5]
-            bin_position = [-0.5, 0.1, 0.5]
 
             # If gripper is open, drop object in bin and check if grasp is successful
             grasp_success = False
@@ -1105,36 +1072,38 @@ class Robot(object):
                 self.tcp_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                 self.tcp_socket.connect((self.tcp_host_ip, self.tcp_port))
                 tcp_command = "def placeToBin():\n"
-                tcp_command += " movej(p[%f,%f,%f,%f,%f,%f],a=%f,v=%f,t=0,r=%f)\n" % (position[0],position[1],bin_position[2],tool_orientation[0],tool_orientation[1],0.0,self.joint_acc*0.5,self.joint_vel*0.5,blend_radius)
-                tcp_command += " movej(p[%f,%f,%f,%f,%f,%f],a=%f,v=%f,t=0,r=%f)\n" % (bin_position[0],bin_position[1],bin_position[2],tilted_tool_orientation[0],tilted_tool_orientation[1],tilted_tool_orientation[2],self.joint_acc*0.5,self.joint_vel*0.5,blend_radius)
+                tcp_command += " movej(p[%f,%f,%f,%f,%f,%f],a=%f,v=%f,t=0,r=%f)\n" % (position[0], position[1], position[2] + 0.2, tool_orientation[0], tool_orientation[1], 0.0, self.joint_acc*0.25, self.joint_vel*0.25, blend_radius)
+                tcp_command += ' sleep(0.15)\n'
+                #tcp_command += " movej(p[%f,%f,%f,%f,%f,%f],a=%f,v=%f,t=0,r=%f)\n" % (bin_position[0],bin_position[1],bin_position[2],tilted_tool_orientation[0],tilted_tool_orientation[1],tilted_tool_orientation[2],self.joint_acc,self.joint_vel,blend_radius)
+                tcp_command += " movej(p[%f,%f,%f,%f,%f,%f],a=%f,v=%f,t=0,r=%f)\n" % (bin_position[0],bin_position[1],bin_position[2],tool_orientation[0],tool_orientation[1],0.0,self.joint_acc,self.joint_vel,blend_radius)
                 tcp_command += "end\n"
                 self.tcp_socket.send(str.encode(tcp_command))
                 self.tcp_socket.close()
-                time.sleep(3)
+
+                while True:
+                    actual_tool_pose = self.parse_tcp_data('cartesian_info')                   
+                    if all([np.abs(actual_tool_pose[j] - bin_position[j]) < self.tool_pose_tolerance[j] for j in range(3)]):
+                        break
+                    else:
+                        print ("Failed to move to bin location")
 
                 # Measure gripper width until robot reaches near bin location
-                print ("Measure gripper width")
-                # Block until robot reaches home location
                 grasp_success = self.check_grasp()
 
-                rob = urx.Robot("192.168.0.3")
-                robotiqgrip = Robotiq_Two_Finger_Gripper(rob)
-                time.sleep(0.25)
-                robotiqgrip.open_gripper()
-                rob.close()
-                time.sleep(0.25)
+                self.open_gripper()
 
                 # Move to home
                 self.tcp_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                 self.tcp_socket.connect((self.tcp_host_ip, self.tcp_port))
                 tcp_command = "def moveToHome():\n"
-                tcp_command += " movej(p[%f,%f,%f,%f,%f,%f],a=%f,v=%f,t=0,r=%f)\n" % (bin_position[0],bin_position[1],bin_position[2],tilted_tool_orientation[0],tilted_tool_orientation[1],tilted_tool_orientation[2],self.joint_acc,self.joint_vel,blend_radius)
-                tcp_command += " movej(p[%f,%f,%f,%f,%f,%f],a=%f,v=%f,t=0,r=0.0)\n" % (home_position[0],home_position[1],home_position[2],tool_orientation[0],tool_orientation[1],0.0,self.joint_acc*0.2,self.joint_vel*0.2)
+                tcp_command += " movej(p[%f,%f,%f,%f,%f,%f],a=%f,v=%f,t=0,r=%f)\n" % (bin_position[0],bin_position[1],bin_position[2], tool_orientation[0], tool_orientation[1], tool_orientation[2], self.joint_acc,self.joint_vel,blend_radius)
+                tcp_command += ' sleep(0.1)\n'
+                tcp_command += " movej(p[%f,%f,%f,%f,%f,%f],a=%f,v=%f,t=0,r=0.0)\n" % (home_position[0],home_position[1],home_position[2],tool_orientation[0],tool_orientation[1], tool_orientation[2],self.joint_acc,self.joint_vel)
                 tcp_command += "end\n"
                 self.tcp_socket.send(str.encode(tcp_command))
                 self.tcp_socket.close()
-                time.sleep(3)
 
+                # Block until robot reaches home location
                 while True:
                     actual_tool_pose = self.parse_tcp_data('cartesian_info')
                                             
@@ -1145,14 +1114,27 @@ class Robot(object):
                 
 
             else: # grasping is fail
+                self.open_gripper()
+
                 self.tcp_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                 self.tcp_socket.connect((self.tcp_host_ip, self.tcp_port))
-                tcp_command = "def process():\n"
-                tcp_command += " movej(p[%f,%f,%f,%f,%f,%f],a=%f,v=%f,t=0,r=0.09)\n" % (position[0],position[1],position[2]+0.1,tool_orientation[0],tool_orientation[1],0.0,self.joint_acc*0.5,self.joint_vel*0.5)
-                tcp_command += " movej(p[%f,%f,%f,%f,%f,%f],a=%f,v=%f,t=0,r=0.0)\n" % (home_position[0],home_position[1],home_position[2],tool_orientation[0],tool_orientation[1],0.0,self.joint_acc*0.5,self.joint_vel*0.5)
+                tcp_command = "def graspFailToMoveHome():\n"
+                tcp_command += " movej(p[%f,%f,%f,%f,%f,%f],a=%f,v=%f,t=0,r=0.0)\n" % (position[0],position[1],position[2]+0.2,tool_orientation[0],tool_orientation[1], 0 ,self.joint_acc*0.25, self.joint_vel*0.25)
+                tcp_command += ' sleep(0.1)\n'
+                tcp_command += " movej(p[%f,%f,%f,%f,%f,%f],a=%f,v=%f,t=0,r=0.0)\n" % (home_position[0],home_position[1],home_position[2],tool_orientation[0],tool_orientation[1], tool_orientation[2],self.joint_acc,self.joint_vel)
                 tcp_command += "end\n"
                 self.tcp_socket.send(str.encode(tcp_command))
                 self.tcp_socket.close()
+
+                # Block until robot reaches home location
+                while True:
+                    actual_tool_pose = self.parse_tcp_data('cartesian_info')
+                                            
+                    if all([np.abs(actual_tool_pose[j] - home_position[j]) < self.tool_pose_tolerance[j] for j in range(3)]):
+                        break
+                    else:
+                        print ("Failed to move to home location")
+
 
             
         return grasp_success
@@ -1218,7 +1200,6 @@ class Robot(object):
 
         else:
             self.go_action_point()
-            time.sleep(5)
             # Compute tool orientation from heightmap rotation angle
             push_orientation = [1.0, 0.0]
             tool_rotation_angle = heightmap_rotation_angle/2
