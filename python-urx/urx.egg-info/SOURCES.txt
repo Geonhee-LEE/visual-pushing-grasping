@@ -2,6 +2,7 @@ README.md
 setup.py
 urx/__init__.py
 urx/robot.py
+urx/robotiq_gripper.py
 urx/robotiq_two_finger_gripper.py
 urx/urrobot.py
 urx/urrtmon.py

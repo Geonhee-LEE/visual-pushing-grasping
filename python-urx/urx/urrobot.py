@@ -123,10 +123,9 @@ class URRobot(object):
         prog += '\tsync()\n'
         prog += '\tglobal msg = socket_read_byte_list(1, "gripper_socket")\n'
         prog += '\tsync()\n'
-        prog += '\tsleep(1.0)\n'
+        prog += '\tsleep(0.1)\n'
         prog += '\tset_digital_out(51-msg[1],True)\n'
         prog += '\ttextmsg(51-msg[1])\n'
-        prog += '\tsleep(1.0)\n'
         prog += "end"
         self.send_program(prog)
 
@@ -134,13 +133,13 @@ class URRobot(object):
         prog = "def digitalReset():\n"
         prog += '\tsocket_close("gripper_socket")\n'
         prog += '\tsocket_open("127.0.0.1", 63352, "gripper_socket")\n'
-        prog += '\tsleep(1.0)\n'
+        prog += '\tsleep(0.1)\n'
         prog += '\tset_digital_out(0, False)\n'
-        prog += '\tsleep(1.0)\n'
+        prog += '\tsleep(0.1)\n'
         prog += '\tset_digital_out(1, False)\n'
-        prog += '\tsleep(1.0)\n'
+        prog += '\tsleep(0.1)\n'
         prog += '\tset_digital_out(2, False)\n'
-        prog += '\tsleep(1.0)\n'
+        prog += '\tsleep(0.1)\n'
         prog += "end"
         self.send_program(prog)
 

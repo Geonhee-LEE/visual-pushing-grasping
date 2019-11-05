@@ -1018,7 +1018,7 @@ class Robot(object):
 
             # Attempt grasp
             position = np.asarray(position).copy()
-            safty_threshold = 0.1
+            safty_threshold = 0.095
             position[2] = max(position[2] , workspace_limits[2][0]+ safty_threshold) # z of 3D coordinate
 
             self.open_gripper()
