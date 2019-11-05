@@ -118,9 +118,11 @@ class Trainer(object):
         self.is_exploit_log = self.is_exploit_log[0:self.iteration]
         self.is_exploit_log.shape = (self.iteration,1)
         self.is_exploit_log = self.is_exploit_log.tolist()
+        '''
         self.clearance_log = np.loadtxt(os.path.join(transitions_directory, 'clearance.log.txt'), delimiter=' ')
         self.clearance_log.shape = (self.clearance_log.shape[0],1)
         self.clearance_log = self.clearance_log.tolist()
+        '''
 
     # Compute forward pass through model to compute affordances/Q
     def forward(self, color_heightmap, depth_heightmap, is_volatile=False, specific_rotation=-1):
