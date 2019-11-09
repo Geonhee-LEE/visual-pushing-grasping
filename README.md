@@ -189,6 +189,10 @@ To train on the real robot, simply run:
 python main.py --tcp_host_ip 192.168.0.3 --tcp_port 30002 --push_rewards --experience_replay --explore_rate_decay --save_visualizations
 ```
 
+#### Finetune for continuing training
+```shell
+python main.py --tcp_host_ip 192.168.0.3 --tcp_port 30002 --push_rewards --experience_replay --explore_rate_decay --save_visualizations --grasp_only --load_snapshot --snapshot_file logs/2019-11-04.13\:18\:01/models/snapshot-000340.reinforcement.pth --continue_logging --logging_directory logs/2019-11-04.13\:18\:01/
+```
 
 ### Additional Tools
 
