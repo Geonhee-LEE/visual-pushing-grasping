@@ -2,6 +2,24 @@
 
 ### Learning Synergies between Pushing and Grasping with Self-supervised Deep Reinforcement Learning
 
+### Usage
+
+To run UR5 with ROS, run the following:
+```shell
+roslaunch ur_modern_driver ur5_bringup.launch 
+```
+
+For launching moveIt and Rviz, run the following:
+
+```shell
+roslaunch total_moveit_config total_moveit_planning_execution.launch
+```
+
+In pytorch_ros conda env, run training with real UR5 with ROS like following:
+```shell
+python ros_main.py --tcp_host_ip 192.168.0.3 --tcp_port 30002 --push_rewards --experience_replay --explore_rate_decay --save_visualizations --grasp_only --load_snapshot --snapshot_file logs/2019-11-04-continue/models/snapshot-000440.reinforcement.pth  --continue_logging --logging_directory logs/2019-11-04-continue/
+```
+
 ### Instructions
 
 1. Run V-REP (navigate to your V-REP directory and run `./vrep.sh`). From the main menu, select `File` > `Open scene...`, and open the file `visual-pushing-grasping/simulation/simulation.ttt` from this repository.
