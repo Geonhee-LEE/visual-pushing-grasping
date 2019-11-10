@@ -26,28 +26,30 @@ class Camera(object):
         self.tcp_port = 50000
         self.buffer_size = 4098 # 4 KiB
 
+        self.color_img = np.empty((self.im_height,self.im_width, 3))
+        self.depth_img = np.empty((self.im_height,self.im_width))
+
         # Connect to server
         self.tcp_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.tcp_socket.connect((self.tcp_host_ip, self.tcp_port))
 
-        self.intrinsics = None
-        self.get_data()
-
         # ROS Interfacing
         self.bridge = CvBridge()
-        self.image_pub = rospy.Publisher("image_topic",Image)
+        self.image_pub = rospy.Publisher("image_topic",Image, queue_size=10)
         
         _thread = threading.Thread(target=self.imageCB)
         _thread.daemon = True
         _thread.start()
 
+        # Connect to server
+        self.intrinsics = None
+        self.get_data()
+        self.get_data_flg = False
 
     def imageCB(self):
-        rate = rospy.Rate(30) # 10hz
-        cv2.namedWindow("color_img",cv2.WINDOW_AUTOSIZE)
+        rate = rospy.Rate(30) # 30hz
         
         while not rospy.is_shutdown():
-            rospy.loginfo("imageCB")
             # Ping the server with anything
             self.tcp_socket.send(b'asdf')
 
@@ -67,27 +69,36 @@ class Camera(object):
             color_img = np.fromstring(data[((10*4)+self.im_width*self.im_height*2):], np.uint8).reshape(self.im_height, self.im_width, 3)
             depth_img = depth_img.astype(float) * depth_scale
 
-            # Color np to img
+            # Color ndarray to img
             tmp_color_data = np.asarray(color_img)
             tmp_color_data.shape = (self.im_height,self.im_width,3)
             tmp_color_image = cv2.cvtColor(tmp_color_data, cv2.COLOR_RGB2BGR)
+            # Depth ndarray to img
+            #tmp_depth_data = np.asarray(depth_img)
+            #tmp_depth_data.shape = (self.im_height,self.im_width)
+            #tmp_depth_data = tmp_depth_data.astype(float)/10000
             #Displayed the image
-            cv2.imwrite(os.path.join('.', 'test.png'), tmp_color_image)
+            #cv2.imwrite(os.path.join('.', 'test.png'), tmp_color_image)
+            #cv2.imwrite(os.path.join('.', 'test-depth.png'), tmp_depth_data)
             #cv2.imshow("depth_img", depth_img)
 
             #Converting OpenCV images to ROS image messages
             try:
+                self.color_img= color_img
+                self.depth_img= depth_img
+                self.get_data_flg = True
                 self.image_pub.publish(self.bridge.cv2_to_imgmsg(tmp_color_image, "bgr8"))
+                #self.depth_pub.publish(self.bridge.cv2_to_imgmsg(tmp_depth_data, "mono8"))
             except CvBridgeError as e:
                 print(e)
 
             rate.sleep()
 
-        return color_img, depth_img
+            time.sleep(0.01)
 
 
     def get_data(self):
-
+        '''
         # Ping the server with anything
         self.tcp_socket.send(b'asdf')
 
@@ -106,9 +117,17 @@ class Camera(object):
         depth_img = np.fromstring(data[(10*4):((10*4)+self.im_width*self.im_height*2)], np.uint16).reshape(self.im_height, self.im_width)
         color_img = np.fromstring(data[((10*4)+self.im_width*self.im_height*2):], np.uint8).reshape(self.im_height, self.im_width, 3)
         depth_img = depth_img.astype(float) * depth_scale
-        
+        '''
+        # For waiting getting the data
+        self.get_data_flg = False
 
-        return color_img, depth_img
+        while not rospy.is_shutdown():
+            if self.get_data_flg == True:
+                break        
+
+            time.sleep(0.01)
+        
+        return self.color_img, self.depth_img
 
 
 '''

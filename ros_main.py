@@ -39,9 +39,8 @@ def main(args):
         print ("current pose quat: ", ur_moveit_api.euler_to_quat(np.array([1.2, 1.2, -1.20])))
         print ("current joint value: ", ur_moveit_api.get_joint_values())
         r.sleep()
-    '''
     #ur_moveit_api.move_to_up()
-
+    '''
     '''
     pub = rospy.Publisher('test', numpy_msg(Floats),queue_size=10)
     a = np.array([1.0, 2.1, 3.2, 4.3, 5.4, 6.5], dtype=np.float32)
@@ -126,7 +125,7 @@ def main(args):
     # Parallel thread to process network output and execute actions
     # -------------------------------------------------------------
     def process_actions():
-        while True:
+        while not rospy.is_shutdown():
             if nonlocal_variables['executing_action']:
                 print('>>>>>>> executing_action start >>>>>>>>>>')                
                 # Determine whether grasping or pushing should be executed based on network predictions
@@ -249,7 +248,7 @@ def main(args):
 
 
     # Start main training/testing loop
-    while True:
+    while not rospy.is_shutdown():
         print('\n ##### %s iteration: %d ##### ' % ('Testing' if is_testing else 'Training', trainer.iteration))
         iteration_time_0 = time.time()
 
