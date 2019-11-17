@@ -423,7 +423,7 @@ def main(args):
             # Save model snapshot
             if not is_testing:
                 logger.save_backup_model(trainer.model, method) 
-                if trainer.iteration % 20 == 0:
+                if trainer.iteration % 10 == 0:
                     logger.save_model(trainer.iteration, trainer.model, method)
                     if trainer.use_cuda:
                         trainer.model = trainer.model.cuda()

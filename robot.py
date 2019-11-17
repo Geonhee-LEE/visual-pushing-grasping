@@ -170,6 +170,7 @@ class Robot(object):
         cam_rotm[0:3,0:3] = np.linalg.inv(utils.euler2rotm(cam_orientation))
         self.cam_pose = np.dot(cam_trans, cam_rotm) # Compute rigid transformation representating camera pose
         self.cam_intrinsics = np.asarray([[618.62, 0, 320], [0, 618.62, 240], [0, 0, 1]])
+        #self.cam_intrinsics = np.asarray([[923.41, 0, 644.15], [0, 922.03, 361.75], [0, 0, 1]])
         self.cam_depth_scale = 1
 
         # Get background image
@@ -208,13 +209,13 @@ class Robot(object):
     def restart_sim(self):
 
         sim_ret, self.UR5_target_handle = vrep.simxGetObjectHandle(self.sim_client,'UR5_target',vrep.simx_opmode_blocking)
-        vrep.simxSetObjectPosition(self.sim_client, self.UR5_target_handle, -1, (-0.5,0,0.3), vrep.simx_opmode_blocking)
+        vrep.simxSetObjectPosition(self.sim_client, self.UR5_target_handle, -1, (-0.5, -0.152, 0.3), vrep.simx_opmode_blocking)
         vrep.simxStopSimulation(self.sim_client, vrep.simx_opmode_blocking)
         vrep.simxStartSimulation(self.sim_client, vrep.simx_opmode_blocking)
         time.sleep(1)
         sim_ret, self.RG2_tip_handle = vrep.simxGetObjectHandle(self.sim_client, 'UR5_tip', vrep.simx_opmode_blocking)
         sim_ret, gripper_position = vrep.simxGetObjectPosition(self.sim_client, self.RG2_tip_handle, -1, vrep.simx_opmode_blocking)
-        while gripper_position[2] > 0.4: # V-REP bug requiring multiple starts and stops to restart
+        while gripper_position[2] > 0.6: # V-REP bug requiring multiple starts and stops to restart
             vrep.simxStopSimulation(self.sim_client, vrep.simx_opmode_blocking)
             vrep.simxStartSimulation(self.sim_client, vrep.simx_opmode_blocking)
             time.sleep(1)
@@ -224,7 +225,13 @@ class Robot(object):
 
         # Check if simulation is stable by checking if gripper is within workspace
         sim_ret, gripper_position = vrep.simxGetObjectPosition(self.sim_client, self.RG2_tip_handle, -1, vrep.simx_opmode_blocking)
-        sim_ok = gripper_position[0] > self.workspace_limits[0][0] - 0.1 and gripper_position[0] < self.workspace_limits[0][1] + 0.1 and gripper_position[1] > self.workspace_limits[1][0] - 0.1 and gripper_position[1] < self.workspace_limits[1][1] + 0.1 and gripper_position[2] > self.workspace_limits[2][0] and gripper_position[2] < self.workspace_limits[2][1]
+        sim_ok = gripper_position[0] > self.workspace_limits[0][0] - 0.2 and \
+                            gripper_position[0] < self.workspace_limits[0][1] + 0.2 and \
+                            gripper_position[1] > self.workspace_limits[1][0] - 0.2 and \
+                            gripper_position[1] < self.workspace_limits[1][1] + 0.2 and \
+                            gripper_position[2] > self.workspace_limits[2][0] and \
+                            gripper_position[2] < self.workspace_limits[2][1]+ 0.4
+        print ('gripper_position: ', gripper_position)
         if not sim_ok:
             print('Simulation unstable. Restarting environment.')
             self.restart_sim()

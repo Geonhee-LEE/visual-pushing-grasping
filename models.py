@@ -215,7 +215,7 @@ class reinforcement_net(nn.Module):
     def forward(self, input_color_data, input_depth_data, is_volatile=False, specific_rotation=-1):
 
         if is_volatile:
-            torch.set_grad_enabled(False)
+            torch.set_grad_enabled(False) 
             output_prob = []
             interm_feat = []
 
@@ -228,12 +228,50 @@ class reinforcement_net(nn.Module):
                 affine_mat_before.shape = (2,3,1)
                 affine_mat_before = torch.from_numpy(affine_mat_before).permute(2,0,1).float()
                 if self.use_cuda:
+                    '''affine_grid(theta, size) -> Tensor
+                    Generates a 2d flow field, given a batch of affine matrices theta. 
+                    Generally used in conjunction with grid_sample to implement Spatial Transformer Networks.
+
+                    Args: 
+                        theta (Tensor): input batch of affine matrices (N \times 2 \times 3) 
+                        size (torch.Size): the target output image size (N \times C \times H \times W). 
+                        Example: torch.Size((32, 3, 24, 24))
+
+                    Returns: 
+                        output (Tensor): output Tensor of size (N \times H \times W \times 2)
+                    '''
                     flow_grid_before = F.affine_grid(Variable(affine_mat_before, requires_grad=False).cuda(), input_color_data.size())
                 else:
                     flow_grid_before = F.affine_grid(Variable(affine_mat_before, requires_grad=False), input_color_data.size())
                 
                 # Rotate images clockwise
                 if self.use_cuda:
+                    '''
+                    grid_sample(input, grid, mode='bilinear', padding_mode='zeros') -> Tensor
+                    Given an input and a flow-field grid, computes the output using input values and pixel locations from grid.
+
+                    Currently, only spatial (4-D) and volumetric (5-D) input are supported.
+
+                    In the spatial (4-D) case, for input with shape (N, C, H_\text{in}, W_\text{in}) and grid with shape (N, H_\text{out}, W_\text{out}, 2), the output will have shape (N, C, H_\text{out}, W_\text{out}).
+
+                    For each output location output[n, :, h, w], the size-2 vector grid[n, h, w] specifies input pixel locations x and y, which are used to interpolate the output value output[n, :, h, w]. In the case of 5D inputs, grid[n, d, h, w] specifies the x, y, z pixel locations for interpolating output[n, :, d, h, w]. mode argument specifies nearest or bilinear interpolation method to sample the input pixels.
+
+                    grid specifies the sampling pixel locations normalized by the input spatial dimensions. Therefore, it should have most values in the range of [-1, 1]. For example, values x = -1, y = -1 is the left-top pixel of input, and values x = 1, y = 1 is the right-bottom pixel of input.
+
+                    If grid has values outside the range of [-1, 1], the corresponding outputs are handled as defined by padding_mode. Options are
+
+                    * `padding_mode="zeros"`: use `0` for out-of-bound grid locations,
+                    * `padding_mode="border"`: use border values for out-of-bound grid locations,
+                    * `padding_mode="reflection"`: use values at locations reflected by
+                    the border for out-of-bound grid locations. For location far away
+                    from the border, it will keep being reflected until becoming in bound,
+                    e.g., (normalized) pixel location `x = -3.5` reflects by border `-1`
+                    and becomes `x' = 1.5`, then reflects by border `1` and becomes
+                    `x'' = -0.5`.
+                    Args: input (Tensor): input of shape (N, C, H_\text{in}, W_\text{in}) (4-D case) or (N, C, D_\text{in}, H_\text{in}, W_\text{in}) (5-D case) grid (Tensor): flow-field of shape (N, H_\text{out}, W_\text{out}, 2) (4-D case) or (N, D_\text{out}, H_\text{out}, W_\text{out}, 3) (5-D case) mode (str): interpolation mode to calculate output values 'bilinear' | 'nearest'. Default: 'bilinear' padding_mode (str): padding mode for outside grid values 'zeros' | 'border' | 'reflection'. Default: 'zeros'
+
+                    Returns: output (Tensor): output Tensor
+                    '''
                     rotate_color = F.grid_sample(Variable(input_color_data).cuda(), flow_grid_before)
                     rotate_depth = F.grid_sample(Variable(input_depth_data).cuda(), flow_grid_before)
                 else:

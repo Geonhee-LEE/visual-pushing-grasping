@@ -28,7 +28,8 @@ def main(args):
     rtc_host_ip = args.rtc_host_ip if not is_sim else None # IP and port to robot arm as real-time client (UR5)
     rtc_port = args.rtc_port if not is_sim else None
     if is_sim:
-        workspace_limits = np.asarray([[-0.724, -0.276], [-0.224, 0.224], [-0.0001, 0.4]]) # Cols: min max, Rows: x y z (define workspace limits in robot coordinates)
+        #workspace_limits = np.asarray([[-0.724, -0.276], [-0.224, 0.224], [-0.0001, 0.4]]) # Cols: min max, Rows: x y z (define workspace limits in robot coordinates)
+        workspace_limits = np.asarray([[-0.724, -0.276], [-0.3, 0.148], [-0.0001, 0.4]])
     else:
         #workspace_limits = np.asarray([[-0.5, -0.25], [-0.35, 0.35], [0.3, 0.40]])  # Cols: min max, Rows: x y z (define workspace limits in robot coordinates)
         #workspace_limits = np.asarray([[-0.724, -0.276], [-0.224, 0.224], [0.3, 0.50]])  # Cols: min max, Rows: x y z (define workspace limits in robot coordinates)
@@ -227,7 +228,8 @@ def main(args):
         # Make sure simulation is still stable (if not, reset simulation)
         if is_sim: robot.check_sim()
 
-        robot.go_wait_point()
+        if not is_sim:
+            robot.go_wait_point()
         # Get latest RGB-D image
         color_img, depth_img = robot.get_camera_data()
         depth_img = depth_img * robot.cam_depth_scale # Apply depth scale from calibration
