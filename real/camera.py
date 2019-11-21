@@ -24,9 +24,6 @@ class Camera(object):
         self.color_img = np.empty((self.im_height,self.im_width, 3))
         self.depth_img = np.empty((self.im_height,self.im_width))
 
-        # Connect to server
-        self.tcp_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.tcp_socket.connect((self.tcp_host_ip, self.tcp_port))
 
         # Connect to server
         self.intrinsics = None
@@ -36,6 +33,9 @@ class Camera(object):
 
     def get_data(self):
         
+        # Connect to server
+        self.tcp_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.tcp_socket.connect((self.tcp_host_ip, self.tcp_port))
         # Ping the server with anything
         self.tcp_socket.send(b'asdf')
 
@@ -55,6 +55,8 @@ class Camera(object):
         color_img = np.fromstring(data[((10*4)+self.im_width*self.im_height*2):], np.uint8).reshape(self.im_height, self.im_width, 3)
         depth_img = depth_img.astype(float) * depth_scale
         
+        # Connect to server
+        self.tcp_socket.close()
         return color_img, depth_img
 
 
