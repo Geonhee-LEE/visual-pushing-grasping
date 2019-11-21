@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+
 import socket
 import select
 import struct
@@ -12,10 +14,15 @@ from simulation import vrep
 # ROS
 import rospy
 import rospkg
-from rospy.numpy_msg import numpy_msg
 from std_msgs.msg import String
 
-from ur_moveit_commands import UR_Moveit_API
+
+from std_srvs.srv import SetBool, SetBoolResponse, SetBoolRequest
+from rospy.numpy_msg import numpy_msg
+from yolact_ros_msgs.msg import Detections
+from yolact_ros_msgs.msg import Detection
+from yolact_ros_msgs.msg import Box
+from yolact_ros_msgs.msg import Mask
 
 HOST = "192.168.0.3" # The remote host
 PORT_30003 = 30003
@@ -28,6 +35,8 @@ class Robot(object):
     def __init__(self, is_sim, obj_mesh_dir, num_obj, workspace_limits,
                  tcp_host_ip, tcp_port, rtc_host_ip, rtc_port,
                  is_testing, test_preset_cases, test_preset_file):
+        detections_pub = rospy.Subscriber("detections",numpy_msg(Detections), self.detection_cb)
+        self.start_clent = rospy.ServiceProxy('/start_instance_seg', SetBool) 
 
         self.is_sim = is_sim
         self.workspace_limits = workspace_limits
@@ -945,6 +954,21 @@ class Robot(object):
 
     # Primitives ----------------------------------------------------------
 
+    def start_eval_service(self): 
+        print ("start_eval_service")
+        rospy.wait_for_service('start_instance_seg')
+        try:
+            response= self.start_clent(True)
+            return response
+        except rospy.ServiceException as e:
+            print ("Service call failed")
+                
+
+
+    def detection_cb(self, data):
+        print ("detection callback!!")
+        print (data)
+
     def grasp(self, position, heightmap_rotation_angle, workspace_limits):
         print('Executing: grasp at (%f, %f, %f)' % (position[0], position[1], position[2]))
 
@@ -1024,6 +1048,9 @@ class Robot(object):
             tilted_tool_orientation_rotm = np.dot(tilt_rotm, tool_orientation_rotm)
             tilted_tool_orientation_axis_angle = utils.rotm2angle(tilted_tool_orientation_rotm)
             tilted_tool_orientation = tilted_tool_orientation_axis_angle[0]*np.asarray(tilted_tool_orientation_axis_angle[1:4])
+
+            self.start_eval_service()
+            print ("Service end")
 
             # Attempt grasp
             position = np.asarray(position).copy()
