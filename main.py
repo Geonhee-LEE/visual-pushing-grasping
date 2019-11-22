@@ -227,9 +227,13 @@ def main(args):
 
         # Make sure simulation is still stable (if not, reset simulation)
         if is_sim: robot.check_sim()
+<<<<<<< HEAD
 
         if not is_sim:
             robot.go_wait_point()
+=======
+        else:  robot.go_wait_point()
+>>>>>>> 940c30fb0affdabd40e6f20eafd3838ea093f31c
         # Get latest RGB-D image
         color_img, depth_img = robot.get_camera_data()
         depth_img = depth_img * robot.cam_depth_scale # Apply depth scale from calibration
@@ -395,7 +399,7 @@ def main(args):
             # Save model snapshot
             if not is_testing:
                 logger.save_backup_model(trainer.model, method) 
-                if trainer.iteration % 20 == 0:
+                if trainer.iteration % 50 == 0:
                     logger.save_model(trainer.iteration, trainer.model, method)
                     if trainer.use_cuda:
                         trainer.model = trainer.model.cuda()

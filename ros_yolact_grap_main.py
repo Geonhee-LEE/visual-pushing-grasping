@@ -119,6 +119,8 @@ def main(args):
                           'push_success' : False,
                           'grasp_success' : False} 
 
+    # Get surface_pts for grasping based on Yolact
+    surface_pts = []
 
     # Parallel thread to process network output and execute actions
     # -------------------------------------------------------------
@@ -230,7 +232,8 @@ def main(args):
                     nonlocal_variables['push_success'] = robot.push(primitive_position, best_rotation_angle, workspace_limits)
                     print('> Push successful: %r' % (nonlocal_variables['push_success']))
                 elif nonlocal_variables['primitive_action'] == 'grasp':
-                    nonlocal_variables['grasp_success'] = robot.grasp(primitive_position, best_rotation_angle, workspace_limits)
+                    #nonlocal_variables['grasp_success'] = robot.grasp(primitive_position, best_rotation_angle, workspace_limits)
+                    nonlocal_variables['grasp_success'] = robot.instance_seg_grasp(primitive_position, best_rotation_angle, workspace_limits, surface_pts)
                     print('> Grasp successful: %r' % (nonlocal_variables['grasp_success']))
 
                 nonlocal_variables['executing_action'] = False
@@ -262,6 +265,8 @@ def main(args):
 
         # Get heightmap from RGB-D image (by re-projecting 3D point cloud)
         color_heightmap, depth_heightmap = utils.get_heightmap(color_img, depth_img, robot.cam_intrinsics, robot.cam_pose, workspace_limits, heightmap_resolution)
+        surface_pts = utils.get_surface_pts(color_img, depth_img, robot.cam_intrinsics, robot.cam_pose)
+        
         valid_depth_heightmap = depth_heightmap.copy()
         valid_depth_heightmap[np.isnan(valid_depth_heightmap)] = 0
 

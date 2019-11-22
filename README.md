@@ -2,7 +2,10 @@
 
 ### Learning Synergies between Pushing and Grasping with Self-supervised Deep Reinforcement Learning
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> 940c30fb0affdabd40e6f20eafd3838ea093f31c
 ### Usage
 
 To run UR5 with ROS, run the following:
@@ -18,10 +21,16 @@ roslaunch total_moveit_config total_moveit_planning_execution.launch
 
 In pytorch_ros conda env, run training with real UR5 with ROS like following:
 ```shell
+<<<<<<< HEAD
 python ros_main.py --tcp_host_ip 192.168.0.3 --tcp_port 30002 --push_rewards --experience_replay --explore_rate_decay --save_visualizations --grasp_only --load_snapshot --snapshot_file logs/2019-11-04-continue/models/snapshot-000840.reinforcement.pth  --continue_logging --logging_directory logs/2019-11-04-continue/
 ```
 
 
+=======
+python ros_main.py --tcp_host_ip 192.168.0.3 --tcp_port 30002 --push_rewards --experience_replay --explore_rate_decay --save_visualizations --grasp_only --load_snapshot --snapshot_file logs/2019-11-04-continue/models/snapshot-000440.reinforcement.pth  --continue_logging --logging_directory logs/2019-11-04-continue/
+```
+
+>>>>>>> 940c30fb0affdabd40e6f20eafd3838ea093f31c
 ### Instructions
 
 1. Run V-REP (navigate to your V-REP directory and run `./vrep.sh`). From the main menu, select `File` > `Open scene...`, and open the file `visual-pushing-grasping/simulation/simulation.ttt` from this repository.
@@ -201,7 +210,7 @@ python capture.py
 
 The script also optimizes for a z-scale factor and saves it into `real/camera_depth_scale.txt`. This scale factor should be multiplied with each depth pixel captured from the camera. This step is more relevant for the RealSense SR300 cameras, which commonly suffer from a severe scaling problem where the 3D data is often 15-20% smaller than real world coordinates. The D400 series are less likely to have such a severe scaling problem. 
 
-### Training with 
+### Training with real robot
 
 To train on the real robot, simply run:
 
@@ -209,10 +218,19 @@ To train on the real robot, simply run:
 python main.py --tcp_host_ip 192.168.0.3 --tcp_port 30002 --push_rewards --experience_replay --explore_rate_decay --save_visualizations
 ```
 
+<<<<<<< HEAD
 #### Finetune for continuing training
 ```shell
 python main.py --tcp_host_ip 192.168.0.3 --tcp_port 30002 --push_rewards --experience_replay --explore_rate_decay --save_visualizations --grasp_only --load_snapshot --snapshot_file logs/2019-11-04.13\:18\:01/models/snapshot-000340.reinforcement.pth --continue_logging --logging_directory logs/2019-11-04.13\:18\:01/
 ```
+=======
+#### Finetuning 
+To continue training with origin weight and logging file, simply run:
+```shell
+python main.py --tcp_host_ip 192.168.0.3 --tcp_port 30002 --push_rewards --experience_replay --explore_rate_decay --save_visualizations --grasp_only --load_snapshot --snapshot_file logs/2019-11-04.13\:18\:01/models/snapshot-000340.reinforcement.pth --continue_logging --logging_directory logs/2019-11-04.13\:18\:01/
+```
+
+>>>>>>> 940c30fb0affdabd40e6f20eafd3838ea093f31c
 
 ### Additional Tools
 

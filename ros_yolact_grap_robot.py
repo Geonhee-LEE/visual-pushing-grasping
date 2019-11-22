@@ -23,6 +23,7 @@ from yolact_ros_msgs.msg import Detections
 from yolact_ros_msgs.msg import Detection
 from yolact_ros_msgs.msg import Box
 from yolact_ros_msgs.msg import Mask
+from yolact_ros_msgs.msg import GraspPt
 
 HOST = "192.168.0.3" # The remote host
 PORT_30003 = 30003
@@ -35,8 +36,12 @@ class Robot(object):
     def __init__(self, is_sim, obj_mesh_dir, num_obj, workspace_limits,
                  tcp_host_ip, tcp_port, rtc_host_ip, rtc_port,
                  is_testing, test_preset_cases, test_preset_file):
-        detections_pub = rospy.Subscriber("detections",numpy_msg(Detections), self.detection_cb)
+        detections_sub = rospy.Subscriber("detections", numpy_msg(Detections), self.detection_cb)
+        graspPt_sub = rospy.Subscriber("com_info", numpy_msg(GraspPt), self.grasp_pt_cb)
         self.start_clent = rospy.ServiceProxy('/start_instance_seg', SetBool) 
+        self.grasp_pt_x = 0
+        self.grasp_pt_y = 0
+        self.grasp_pt_ang = 0
 
         self.is_sim = is_sim
         self.workspace_limits = workspace_limits
@@ -964,10 +969,121 @@ class Robot(object):
             print ("Service call failed")
                 
 
+    def get_orientation_from_mask(self, mask):
+        mask_data = mask.numpy()
+        mask_data = mask.astype(np.int64)
+        mask_data = mask_data * 100
+         
+
+        mask_h_sum = 0
+        mask_w_sum = 0
+        sum_count = 0
+        
+        for i in range(0, mask_data.shape[1]):
+            for j in range(0,mask_data.shape[2]):
+                if mask_data[num_,i,j,0] != 0:
+                    mask_h_sum += i
+                    mask_w_sum += j
+                    sum_count += 1
+
+        mask_h = mask_h_sum / sum_count
+        mask_w = mask_w_sum / sum_count
+
+        mask_h_index = int(mask_h)
+        mask_w_index = int(mask_w)
+
+        print ("-----------------------------")
+        print ("center of mass x :", mask_h_index)
+        print ("center of mass y :", mask_w_index)
+        print ("-----------------------------")
+
+        mask_data[num_, mask_h_index, mask_w_index, 0] = 255
+
+        img = mask_data[num_, :, :, 0]
+    
+        rows = img.shape[0]
+        cols = img.shape[1]
+        
+        x = np.ones((rows, 1))
+        y = np.ones((1, cols))
+
+        for i in range(2, cols+1):
+            m = np.ones((rows, 1))*i
+            x = np.hstack((x,m))
+
+        for i in range(2, rows+1):
+            n = np.ones((1, cols))*i
+            y = np.vstack((y,n))
+
+        area = img.sum()
+        f_img = img.astype(np.float)
+
+        im_x = (f_img * x)
+        im_y = (f_img * y)
+
+        meanx = im_x.sum()/area
+        meany = im_y.sum()/area
+
+        x = x - meanx
+        y = y - meany
+
+        a_img = f_img * (x * x)
+        b_img = f_img * (x * y)
+        c_img = f_img * (y * y)
+        
+        a = a_img.sum()
+        b = b_img.sum()*2
+        c = c_img.sum() 
+
+        denom = b*b + (a-c)*(a-c)
+
+        if denom == 0:
+            thetamin = 2 * 3.14 * random.random(0,1)
+            thetamax = 2 * 3.14 * random.random(0,1)
+            roundness = 1
+        else:
+            sin2thetamin = b/math.sqrt(denom)
+            sin2thetamax = -sin2thetamin
+            cos2thetamin = (a-c)/math.sqrt(denom)
+            cos2thetamax = -cos2thetamin
+
+            thetamin = math.atan2(sin2thetamin, cos2thetamin)/2
+            thetamax = math.atan2(sin2thetamax, cos2thetamax)/2
+
+            lmin = 0.5*(c+a) - 0.5*(a-c)*cos2thetamin - 0.5*b*sin2thetamin
+            lmax = 0.5*(c+a) - 0.5*(a-c)*cos2thetamax - 0.5*b*sin2thetamax
+
+            roundness = lmin/lmax
+        
+        print ("-----------------------------")
+        print ("Theta_min(deg)",thetamin * 57.325)
+        print ("-----------------------------")
+
+        point_x = 50*math.sin(thetamin)
+        point_y = 50*math.cos(thetamin)
+
+        rotation_point_x = mask_h_index - point_x
+        rotation_point_y = mask_w_index - point_y
+
+        rotation_point_x = int(rotation_point_x)
+        rotation_point_y = int(rotation_point_y)
+        
+        mask_data[num_, rotation_point_x, rotation_point_y, 0] = 255
+
+        return thetamin
 
     def detection_cb(self, data):
         print ("detection callback!!")
-        print (data)
+        for i in range(0, len(data.detections)):
+            print("Class name: ", data.detections[i].class_name)
+
+    def grasp_pt_cb(self, data):
+        print("com callback!!")
+        for i in range(0, len(data.angle)):
+            print("Angle: ", data.angle[i], "center of mass x, y: ", data.com_x[i], ", ", data.com_y[i])
+            self.grasp_pt_x = data.com_x[i]
+            self.grasp_pt_y = data.com_y[i]
+            self.grasp_pt_ang = data.angle[i]  
 
     def grasp(self, position, heightmap_rotation_angle, workspace_limits):
         print('Executing: grasp at (%f, %f, %f)' % (position[0], position[1], position[2]))
@@ -1031,27 +1147,35 @@ class Robot(object):
                 vrep.simxSetObjectPosition(self.sim_client,grasped_object_handle,-1,(-0.5, 0.5 + 0.05*float(grasped_object_ind), 0.1),vrep.simx_opmode_blocking)
 
         else:
+            # Call service for receiving center of mass through Yolact based on ros
+            self.start_eval_service()
+            if self.grasp_pt_x == 0 and self.grasp_pt_y == 0:
+                time.sleep(3)
+
+
+            #position[0] =  self.grasp_pt_x * 0.002+ #* heightmap_resolution +  workspace_limits[0][0] 
+            #position[1] = self.grasp_pt_y  * 0.002 - 0.3     #* heightmap_resolution +  workspace_limits[1][0] 
+            heightmap_rotation_angle = self.grasp_pt_ang
+            self.grasp_pt_x = 0
+            self.grasp_pt_y = 0
+            '''
+            # 3D position [x, y, depth] of cartesian coordinate, conveted from pixel
+            primitive_position = [best_pix_x * heightmap_resolution + workspace_limits[0][0], \
+                                    best_pix_y * heightmap_resolution + workspace_limits[1][0], \
+                                    valid_depth_heightmap[best_pix_y][best_pix_x] + workspace_limits[2][0]]
+            '''
+
             self.go_action_point()
             # Compute tool orientation from heightmap rotation angle
             grasp_orientation = [1.0,0.0] 
-            print("heightmap_rotation_angle: ", heightmap_rotation_angle * 180 / 3.14)
-            if heightmap_rotation_angle-90 > np.pi:
-                heightmap_rotation_angle = heightmap_rotation_angle - 2*np.pi
+            print("heightmap_rotation_angle: ", heightmap_rotation_angle  * 57.324840764) # Rad to deg
+
             tool_rotation_angle = (heightmap_rotation_angle-90)/2
             tool_orientation = np.asarray([grasp_orientation[0]*np.cos(tool_rotation_angle) - grasp_orientation[1]*np.sin(tool_rotation_angle), grasp_orientation[0]*np.sin(tool_rotation_angle) + grasp_orientation[1]*np.cos(tool_rotation_angle), 0.0])*np.pi
             tool_orientation_angle = np.linalg.norm(tool_orientation)
             tool_orientation_axis = tool_orientation/tool_orientation_angle
             tool_orientation_rotm = utils.angle2rotm(tool_orientation_angle, tool_orientation_axis, point=None)[:3,:3]
             
-            # Compute tilted tool orientation during dropping into bin
-            tilt_rotm = utils.euler2rotm(np.asarray([-np.pi/4,0,0]))
-            tilted_tool_orientation_rotm = np.dot(tilt_rotm, tool_orientation_rotm)
-            tilted_tool_orientation_axis_angle = utils.rotm2angle(tilted_tool_orientation_rotm)
-            tilted_tool_orientation = tilted_tool_orientation_axis_angle[0]*np.asarray(tilted_tool_orientation_axis_angle[1:4])
-
-            self.start_eval_service()
-            print ("Service end")
-
             # Attempt grasp
             position = np.asarray(position).copy()
             safty_threshold = 0.095
@@ -1069,7 +1193,6 @@ class Robot(object):
             tcp_command += "end\n"
             #self.tcp_socket.send(str.encode(tcp_command))
             #self.tcp_socket.close()
-            print("grasp(): ", tcp_command)
             self.urscript_pub.publish(tcp_command)
 
             # Block until robot reaches target tool position and gripper fingers have stopped moving
@@ -1108,7 +1231,6 @@ class Robot(object):
                 tcp_command += "end\n"
                 #self.tcp_socket.send(str.encode(tcp_command))
                 #self.tcp_socket.close()
-                print("grasp(), placing: ", tcp_command)
                 self.urscript_pub.publish(tcp_command)
 
                 while True:
@@ -1131,7 +1253,6 @@ class Robot(object):
                 tcp_command += "end\n"
                 #self.tcp_socket.send(str.encode(tcp_command))
                 #self.tcp_socket.close()
-                print("grasp(), moveToHome: ", tcp_command)
                 self.urscript_pub.publish(tcp_command)
 
                 # Block until robot reaches home location
@@ -1154,7 +1275,6 @@ class Robot(object):
                 tcp_command += "end\n"
                 #self.tcp_socket.send(str.encode(tcp_command))
                 #self.tcp_socket.close()
-                print("grasp(), fail: ", tcp_command)
                 self.urscript_pub.publish(tcp_command)
 
                 # Block until robot reaches home location
@@ -1162,6 +1282,151 @@ class Robot(object):
                     actual_tool_pose = self.parse_tcp_data('cartesian_info')                                            
                     if all([np.abs(actual_tool_pose[j] - home_position[j]) < self.tool_pose_tolerance[j] for j in range(3)]):
                         break
+
+        return grasp_success
+
+    def instance_seg_grasp(self, position, heightmap_rotation_angle, workspace_limits, surface_pts):
+        print('Executing: grasp at (%f, %f, %f)' % (position[0], position[1], position[2]))
+
+        # Call service for receiving center of mass through Yolact based on ros
+        self.start_eval_service()
+        if self.grasp_pt_x == 0 or self.grasp_pt_y == 0 or self.grasp_pt_ang == 0: 
+            time.sleep(3)
+        
+        position[0] = surface_pts[1280*(self.grasp_pt_y-1) + self.grasp_pt_x-1, 0]
+        position[1] = surface_pts[1280*(self.grasp_pt_y-1) + self.grasp_pt_x-1, 1]
+        print ("[grasp_pt_x, grasp_pt_y, grasp_pt_ang]", self.grasp_pt_x, self.grasp_pt_y, self.grasp_pt_ang)
+        print ("[position_x, position_y]", position[0], position[1])
+        
+        #position[0] =  self.grasp_pt_x * 0.002+ #* heightmap_resolution +  workspace_limits[0][0] 
+        #position[1] = self.grasp_pt_y  * 0.002 - 0.3     #* heightmap_resolution +  workspace_limits[1][0] 
+        heightmap_rotation_angle = self.grasp_pt_ang  
+        self.grasp_pt_x = 0
+        self.grasp_pt_y = 0
+        '''
+        # 3D position [x, y, depth] of cartesian coordinate, conveted from pixel
+        primitive_position = [best_pix_x * heightmap_resolution + workspace_limits[0][0], \
+                                best_pix_y * heightmap_resolution + workspace_limits[1][0], \
+                                valid_depth_heightmap[best_pix_y][best_pix_x] + workspace_limits[2][0]]
+        '''
+
+        self.go_action_point()
+        # Compute tool orientation from heightmap rotation angle
+        grasp_orientation = [1.0, 0.0] 
+        print("heightmap_rotation_angle: ", heightmap_rotation_angle * 57.297469362) # Rad to deg
+
+        tool_rotation_angle = heightmap_rotation_angle - 0.785 
+        tool_orientation = np.asarray([grasp_orientation[0]*np.cos(tool_rotation_angle) - grasp_orientation[1]*np.sin(tool_rotation_angle), \
+            grasp_orientation[0]*np.sin(tool_rotation_angle) + grasp_orientation[1]*np.cos(tool_rotation_angle), 0.0])*np.pi
+        tool_orientation_angle = np.linalg.norm(tool_orientation)
+        tool_orientation_axis = tool_orientation/tool_orientation_angle
+        tool_orientation_rotm = utils.angle2rotm(tool_orientation_angle, tool_orientation_axis, point=None)[:3,:3]
+        
+        # Attempt grasp
+        position = np.asarray(position).copy()
+        safty_threshold = 0.095
+        position[2] = max(position[2] , workspace_limits[2][0]+ safty_threshold) # z of 3D coordinate
+
+        self.open_gripper()
+
+        #self.tcp_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        #self.tcp_socket.connect((self.tcp_host_ip, self.tcp_port))
+        tcp_command = "def moveToGraspPt():\n"
+        # Target grasping point
+        tcp_command += " movej(p[%f,%f,%f,%f,%f,%f],a=%f,v=%f,t=0,r=0.05)\n" % (position[0],position[1],position[2]+0.1, tool_orientation[0], tool_orientation[1], 0.0,self.joint_acc*0.25,self.joint_vel*0.25)
+        # Move Down
+        tcp_command += " movej(p[%f,%f,%f,%f,%f,%f],a=%f,v=%f,t=0,r=0.00)\n" % (position[0],position[1],position[2], tool_orientation[0], tool_orientation[1], 0.0,self.joint_acc*0.2,self.joint_vel*0.2)
+        tcp_command += "end\n"
+        #self.tcp_socket.send(str.encode(tcp_command))
+        #self.tcp_socket.close()
+        self.urscript_pub.publish(tcp_command)
+
+        # Block until robot reaches target tool position and gripper fingers have stopped moving
+        timeout_t0 = time.time()
+        while True:
+            actual_tool_pose = self.parse_tcp_data('cartesian_info')
+            timeout_t1 = time.time()
+            if all([np.abs(actual_tool_pose[j] - position[j]) < self.tool_pose_tolerance[j] for j in range(3)]) \
+                or (timeout_t1 - timeout_t0) > 10:
+                break
+            
+        self.close_gripper()
+
+        # Check if gripper is open (grasp might be successful)
+        gripper_open = self.check_grasp()
+        
+        # # Check if grasp is successful
+        bin_position = [-0.3, 0.45, 0.6]
+        home_position = [-0.5, 0.0, 0.5]
+
+        # If gripper is open, drop object in bin and check if grasp is successful
+        grasp_success = False
+        if gripper_open: # Success justification.
+            # Pre-compute blend radius
+            #blend_radius = min(abs(bin_position[1] - position[1])/2 - 0.01, 0.2)
+            blend_radius = 0
+
+            # Attempt placing
+            #self.tcp_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            #self.tcp_socket.connect((self.tcp_host_ip, self.tcp_port))
+            tcp_command = "def placeToBin():\n"
+            tcp_command += " movej(p[%f,%f,%f,%f,%f,%f],a=%f,v=%f,t=0,r=%f)\n" % (position[0], position[1], position[2] + 0.15, tool_orientation[0], tool_orientation[1], 0.0, self.joint_acc*0.25, self.joint_vel*0.25, blend_radius)
+            tcp_command += ' sleep(0.15)\n'
+            #tcp_command += " movej(p[%f,%f,%f,%f,%f,%f],a=%f,v=%f,t=0,r=%f)\n" % (bin_position[0],bin_position[1],bin_position[2],tilted_tool_orientation[0],tilted_tool_orientation[1],tilted_tool_orientation[2],self.joint_acc,self.joint_vel,blend_radius)
+            tcp_command += " movej(p[%f,%f,%f,%f,%f,%f],a=%f,v=%f,t=0,r=%f)\n" % (bin_position[0],bin_position[1],bin_position[2],tool_orientation[0],tool_orientation[1],0.0,self.joint_acc,self.joint_vel,blend_radius)
+            tcp_command += "end\n"
+            #self.tcp_socket.send(str.encode(tcp_command))
+            #self.tcp_socket.close()
+            self.urscript_pub.publish(tcp_command)
+
+            while True:
+                actual_tool_pose = self.parse_tcp_data('cartesian_info')                   
+                if all([np.abs(actual_tool_pose[j] - bin_position[j]) < self.tool_pose_tolerance[j] for j in range(3)]):
+                    break
+
+            # Measure gripper width until robot reaches near bin location
+            grasp_success = self.check_grasp()
+
+            self.open_gripper()
+
+            # Move to home
+            #self.tcp_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            #self.tcp_socket.connect((self.tcp_host_ip, self.tcp_port))
+            tcp_command = "def moveToHome():\n"
+            tcp_command += " movej(p[%f,%f,%f,%f,%f,%f],a=%f,v=%f,t=0,r=%f)\n" % (bin_position[0],bin_position[1],bin_position[2], tool_orientation[0], tool_orientation[1], tool_orientation[2], self.joint_acc,self.joint_vel,blend_radius)
+            tcp_command += ' sleep(0.1)\n'
+            tcp_command += " movej(p[%f,%f,%f,%f,%f,%f],a=%f,v=%f,t=0,r=0.0)\n" % (home_position[0],home_position[1],home_position[2],tool_orientation[0],tool_orientation[1], tool_orientation[2],self.joint_acc,self.joint_vel)
+            tcp_command += "end\n"
+            #self.tcp_socket.send(str.encode(tcp_command))
+            #self.tcp_socket.close()
+            self.urscript_pub.publish(tcp_command)
+
+            # Block until robot reaches home location
+            while True:
+                actual_tool_pose = self.parse_tcp_data('cartesian_info')
+                                        
+                if all([np.abs(actual_tool_pose[j] - home_position[j]) < self.tool_pose_tolerance[j] for j in range(3)]):
+                    break
+            
+        else: # grasping is fail
+            self.open_gripper()
+
+            #self.tcp_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            #self.tcp_socket.connect((self.tcp_host_ip, self.tcp_port))
+            tcp_command = "def graspFailToMoveHome():\n"
+            tcp_command += " movej(p[%f,%f,%f,%f,%f,%f],a=%f,v=%f,t=0,r=0.0)\n" % (position[0],position[1],position[2]+0.2,tool_orientation[0],tool_orientation[1], 0 ,self.joint_acc*0.25, self.joint_vel*0.25)
+            tcp_command += ' sleep(0.1)\n'
+            tcp_command += " movej(p[%f,%f,%f,%f,%f,%f],a=%f,v=%f,t=0,r=0.0)\n" % (home_position[0],home_position[1],home_position[2],tool_orientation[0],tool_orientation[1], tool_orientation[2],self.joint_acc,self.joint_vel)
+            tcp_command += "end\n"
+            #self.tcp_socket.send(str.encode(tcp_command))
+            #self.tcp_socket.close()
+            self.urscript_pub.publish(tcp_command)
+
+            # Block until robot reaches home location
+            while True:
+                actual_tool_pose = self.parse_tcp_data('cartesian_info')                                            
+                if all([np.abs(actual_tool_pose[j] - home_position[j]) < self.tool_pose_tolerance[j] for j in range(3)]):
+                    break
 
         return grasp_success
 
