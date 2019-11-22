@@ -25,6 +25,19 @@ In pytorch_ros conda env, run training with real UR5 with ROS like following:
 python ros_main.py --tcp_host_ip 192.168.0.3 --tcp_port 30002 --push_rewards --experience_replay --explore_rate_decay --save_visualizations --grasp_only --load_snapshot --snapshot_file logs/2019-11-04-continue/models/snapshot-000840.reinforcement.pth  --continue_logging --logging_directory logs/2019-11-04-continue/
 ```
 
+#### Integration with [Yolact ros](https://github.com/Geonhee-LEE/yolact_ros)
+
+Conda env: (torch11py36) 
+```shell
+rosrun yolact_ros yolact_ros_server.py  --trained_model=/home/geonhee-ml/rl_ws/src/yolact_ros/src/yolact/weight/yolact_base_1234_100000.pth  --score_threshold=0.3 --top_k=100 
+```
+
+Conda env: (pytorch_ros) 
+
+```shell
+python ros_yolact_grap_main.py --tcp_host_ip 192.168.0.3 --tcp_port 30002 --push_rewards --experience_replay --explore_rate_decay --save_visualizations --grasp_only --load_snapshot --snapshot_file logs/2019-11-04-continue/models/snapshot-000840.reinforcement.pth 
+```
+
 
 =======
 python ros_main.py --tcp_host_ip 192.168.0.3 --tcp_port 30002 --push_rewards --experience_replay --explore_rate_decay --save_visualizations --grasp_only --load_snapshot --snapshot_file logs/2019-11-04-continue/models/snapshot-000440.reinforcement.pth  --continue_logging --logging_directory logs/2019-11-04-continue/
