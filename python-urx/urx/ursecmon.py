@@ -271,6 +271,7 @@ class SecondaryMonitor(Thread):
             with self._prog_queue_lock:
                 self._prog_queue.append(data)
             data.condition.wait()
+            #print("send_program: ", data)
             self.logger.debug("program sendt: %s", data)
 
     def run(self):

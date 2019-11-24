@@ -10,7 +10,9 @@ from robot import Robot
 tcp_host_ip = '192.168.0.3' # IP and port to robot arm as TCP client (UR5)
 tcp_port = 30002
 #workspace_limits = np.asarray([[0.3, 0.748], [-0.224, 0.224], [-0.255, -0.1]]) # Cols: min max, Rows: x y z (define workspace limits in robot coordinates)
-workspace_limits = np.asarray([[-0.724, -0.276], [-0.224, 0.224], [0.3, 0.40]])
+#workspace_limits = np.asarray([[-0.724, -0.276], [-0.224, 0.224], [0.3, 0.40]])
+workspace_limits = np.asarray([[-0.724, -0.276], [-0.3, 0.148], [0.2, 0.35]])
+
 tool_orientation = [2.22,2.22,0] # [0,-2.22,2.22] # [2.22,2.22,0]
 # ---------------------------------------------
 

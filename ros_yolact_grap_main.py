@@ -12,13 +12,39 @@ import cv2
 from collections import namedtuple
 import torch  
 from torch.autograd import Variable
-from robot import Robot
+from ros_yolact_grap_robot import Robot
 from trainer import Trainer
 from logger import Logger
 import utils
 
+# ROS
+import rospy
+import rospkg
+from std_msgs.msg import String
+from ur_moveit_commands import UR_Moveit_API
+
 
 def main(args):
+    # Can check log msgs according to log_level {rospy.DEBUG, rospy.INFO, rospy.WARN, rospy.ERROR} 
+    rospy.init_node('ur5-grasping', anonymous=True, log_level=rospy.DEBUG)
+    ur_moveit_api = UR_Moveit_API(boundaries=True)
+    #ur_moveit_api.move_to_neutral()
+    '''
+    r = rospy.Rate(1) # 10hz
+    while not rospy.is_shutdown():
+        print ("current pose: ", ur_moveit_api.get_current_pose())
+        print ("current pose euler: ", ur_moveit_api.quat_to_euler(ur_moveit_api.get_current_pose().pose))
+        print ("current pose quat: ", ur_moveit_api.euler_to_quat(np.array([1.2, 1.2, -1.20])))
+        print ("current joint value: ", ur_moveit_api.get_joint_values())
+        r.sleep()
+    #ur_moveit_api.move_to_up()
+    '''
+    '''
+    pub = rospy.Publisher('test', numpy_msg(Floats),queue_size=10)
+    a = np.array([1.0, 2.1, 3.2, 4.3, 5.4, 6.5], dtype=np.float32)
+    pub.publish(a)
+    '''
+
     # --------------- Setup options ---------------
     is_sim = args.is_sim # Run in simulation?
     obj_mesh_dir = os.path.abspath(args.obj_mesh_dir) if is_sim else None # Directory containing 3D mesh files (.obj) of objects to be added to simulation
@@ -28,8 +54,7 @@ def main(args):
     rtc_host_ip = args.rtc_host_ip if not is_sim else None # IP and port to robot arm as real-time client (UR5)
     rtc_port = args.rtc_port if not is_sim else None
     if is_sim:
-        #workspace_limits = np.asarray([[-0.724, -0.276], [-0.224, 0.224], [-0.0001, 0.4]]) # Cols: min max, Rows: x y z (define workspace limits in robot coordinates)
-        workspace_limits = np.asarray([[-0.724, -0.276], [-0.3, 0.148], [-0.0001, 0.4]])
+        workspace_limits = np.asarray([[-0.724, -0.276], [-0.224, 0.224], [-0.0001, 0.4]]) # Cols: min max, Rows: x y z (define workspace limits in robot coordinates)
     else:
         #workspace_limits = np.asarray([[-0.5, -0.25], [-0.35, 0.35], [0.3, 0.40]])  # Cols: min max, Rows: x y z (define workspace limits in robot coordinates)
         #workspace_limits = np.asarray([[-0.724, -0.276], [-0.224, 0.224], [0.3, 0.50]])  # Cols: min max, Rows: x y z (define workspace limits in robot coordinates)
@@ -94,11 +119,13 @@ def main(args):
                           'push_success' : False,
                           'grasp_success' : False} 
 
+    # Get surface_pts for grasping based on Yolact
+    surface_pts = []
 
     # Parallel thread to process network output and execute actions
     # -------------------------------------------------------------
     def process_actions():
-        while True:
+        while not rospy.is_shutdown():
             if nonlocal_variables['executing_action']:
                 print('>>>>>>> executing_action start >>>>>>>>>>')                
                 # Determine whether grasping or pushing should be executed based on network predictions
@@ -205,7 +232,8 @@ def main(args):
                     nonlocal_variables['push_success'] = robot.push(primitive_position, best_rotation_angle, workspace_limits)
                     print('> Push successful: %r' % (nonlocal_variables['push_success']))
                 elif nonlocal_variables['primitive_action'] == 'grasp':
-                    nonlocal_variables['grasp_success'] = robot.grasp(primitive_position, best_rotation_angle, workspace_limits)
+                    #nonlocal_variables['grasp_success'] = robot.grasp(primitive_position, best_rotation_angle, workspace_limits)
+                    nonlocal_variables['grasp_success'] = robot.instance_seg_grasp(primitive_position, best_rotation_angle, workspace_limits, surface_pts)
                     print('> Grasp successful: %r' % (nonlocal_variables['grasp_success']))
 
                 nonlocal_variables['executing_action'] = False
@@ -221,25 +249,24 @@ def main(args):
 
 
     # Start main training/testing loop
-    while True:
+    while not rospy.is_shutdown():
         print('\n ##### %s iteration: %d ##### ' % ('Testing' if is_testing else 'Training', trainer.iteration))
         iteration_time_0 = time.time()
 
         # Make sure simulation is still stable (if not, reset simulation)
         if is_sim: robot.check_sim()
-<<<<<<< HEAD
 
-        if not is_sim:
+        if not is_sim: 
             robot.go_wait_point()
-=======
-        else:  robot.go_wait_point()
->>>>>>> 940c30fb0affdabd40e6f20eafd3838ea093f31c
+            
         # Get latest RGB-D image
         color_img, depth_img = robot.get_camera_data()
         depth_img = depth_img * robot.cam_depth_scale # Apply depth scale from calibration
 
         # Get heightmap from RGB-D image (by re-projecting 3D point cloud)
         color_heightmap, depth_heightmap = utils.get_heightmap(color_img, depth_img, robot.cam_intrinsics, robot.cam_pose, workspace_limits, heightmap_resolution)
+        surface_pts = utils.get_surface_pts(color_img, depth_img, robot.cam_intrinsics, robot.cam_pose)
+        
         valid_depth_heightmap = depth_heightmap.copy()
         valid_depth_heightmap[np.isnan(valid_depth_heightmap)] = 0
 
@@ -399,7 +426,7 @@ def main(args):
             # Save model snapshot
             if not is_testing:
                 logger.save_backup_model(trainer.model, method) 
-                if trainer.iteration % 50 == 0:
+                if trainer.iteration % 10 == 0:
                     logger.save_model(trainer.iteration, trainer.model, method)
                     if trainer.use_cuda:
                         trainer.model = trainer.model.cuda()
