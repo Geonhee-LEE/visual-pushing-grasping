@@ -834,18 +834,18 @@ class Robot(object):
             #self.tcp_socket.connect((self.tcp_host_ip, self.tcp_port))
             tcp_command = "movel(p[%f,%f,%f,%f,%f,%f],a=%f,v=%f,t=0,r=0)\n" % (tool_position[0],tool_position[1],tool_position[2],tool_orientation[0],tool_orientation[1],tool_orientation[2],self.tool_acc,self.tool_vel)
             #self.tcp_socket.send(str.encode(tcp_command))
-            print("move_to(): ", tcp_command)
+            #print("move_to(): ", tcp_command)
             self.urscript_pub.publish(tcp_command)
             #self.tcp_socket.close()
 
             # Block until robot reaches target tool position
-            print("Block until robot reaches target tool position")
+            #print("Block until robot reaches target tool position")
             #tcp_state_data = self.tcp_socket.recv(2048)
             #actual_tool_pose = self.parse_tcp_state_data(tcp_state_data, 'cartesian_info')
             actual_tool_pose = self.parse_tcp_data('cartesian_info')
             
             while not all([np.abs(actual_tool_pose[j] - tool_position[j]) < self.tool_pose_tolerance[j] for j in range(3)]):
-                print("while loop") 
+                #print("while loop") 
                 # [min(np.abs(actual_tool_pose[j] - tool_orientation[j-3]), np.abs(np.abs(actual_tool_pose[j] - tool_orientation[j-3]) - np.pi*2)) < self.tool_pose_tolerance[j] for j in range(3,6)]
                 # print([np.abs(actual_tool_pose[j] - tool_position[j]) for j in range(3)] + [min(np.abs(actual_tool_pose[j] - tool_orientation[j-3]), np.abs(np.abs(actual_tool_pose[j] - tool_orientation[j-3]) - np.pi*2)) for j in range(3,6)])
                 #tcp_state_data = self.tcp_socket.recv(2048)
@@ -929,7 +929,7 @@ class Robot(object):
         tcp_command = tcp_command + "],a=%f,v=%f)\n" % (self.joint_acc+1.0, self.joint_vel+3.0)
         #self.tcp_socket.send(str.encode(tcp_command))
         #self.tcp_socket.close()
-        print("move_joints(): ", tcp_command)
+        #print("move_joints(): ", tcp_command)
         self.urscript_pub.publish(tcp_command)
         
         # Block until robot reaches home state
@@ -960,118 +960,16 @@ class Robot(object):
     # Primitives ----------------------------------------------------------
 
     def start_eval_service(self): 
-        print ("start_eval_service")
+        print ("Start_eval_service")
         rospy.wait_for_service('start_instance_seg')
         try:
             response= self.start_clent(True)
             return response
         except rospy.ServiceException as e:
             print ("Service call failed")
+            return False
+
                 
-
-    def get_orientation_from_mask(self, mask):
-        mask_data = mask.numpy()
-        mask_data = mask.astype(np.int64)
-        mask_data = mask_data * 100
-         
-
-        mask_h_sum = 0
-        mask_w_sum = 0
-        sum_count = 0
-        
-        for i in range(0, mask_data.shape[1]):
-            for j in range(0,mask_data.shape[2]):
-                if mask_data[num_,i,j,0] != 0:
-                    mask_h_sum += i
-                    mask_w_sum += j
-                    sum_count += 1
-
-        mask_h = mask_h_sum / sum_count
-        mask_w = mask_w_sum / sum_count
-
-        mask_h_index = int(mask_h)
-        mask_w_index = int(mask_w)
-
-        print ("-----------------------------")
-        print ("center of mass x :", mask_h_index)
-        print ("center of mass y :", mask_w_index)
-        print ("-----------------------------")
-
-        mask_data[num_, mask_h_index, mask_w_index, 0] = 255
-
-        img = mask_data[num_, :, :, 0]
-    
-        rows = img.shape[0]
-        cols = img.shape[1]
-        
-        x = np.ones((rows, 1))
-        y = np.ones((1, cols))
-
-        for i in range(2, cols+1):
-            m = np.ones((rows, 1))*i
-            x = np.hstack((x,m))
-
-        for i in range(2, rows+1):
-            n = np.ones((1, cols))*i
-            y = np.vstack((y,n))
-
-        area = img.sum()
-        f_img = img.astype(np.float)
-
-        im_x = (f_img * x)
-        im_y = (f_img * y)
-
-        meanx = im_x.sum()/area
-        meany = im_y.sum()/area
-
-        x = x - meanx
-        y = y - meany
-
-        a_img = f_img * (x * x)
-        b_img = f_img * (x * y)
-        c_img = f_img * (y * y)
-        
-        a = a_img.sum()
-        b = b_img.sum()*2
-        c = c_img.sum() 
-
-        denom = b*b + (a-c)*(a-c)
-
-        if denom == 0:
-            thetamin = 2 * 3.14 * random.random(0,1)
-            thetamax = 2 * 3.14 * random.random(0,1)
-            roundness = 1
-        else:
-            sin2thetamin = b/math.sqrt(denom)
-            sin2thetamax = -sin2thetamin
-            cos2thetamin = (a-c)/math.sqrt(denom)
-            cos2thetamax = -cos2thetamin
-
-            thetamin = math.atan2(sin2thetamin, cos2thetamin)/2
-            thetamax = math.atan2(sin2thetamax, cos2thetamax)/2
-
-            lmin = 0.5*(c+a) - 0.5*(a-c)*cos2thetamin - 0.5*b*sin2thetamin
-            lmax = 0.5*(c+a) - 0.5*(a-c)*cos2thetamax - 0.5*b*sin2thetamax
-
-            roundness = lmin/lmax
-        
-        print ("-----------------------------")
-        print ("Theta_min(deg)",thetamin * 57.325)
-        print ("-----------------------------")
-
-        point_x = 50*math.sin(thetamin)
-        point_y = 50*math.cos(thetamin)
-
-        rotation_point_x = mask_h_index - point_x
-        rotation_point_y = mask_w_index - point_y
-
-        rotation_point_x = int(rotation_point_x)
-        rotation_point_y = int(rotation_point_y)
-        
-        mask_data[num_, rotation_point_x, rotation_point_y, 0] = 255
-
-        return thetamin
-
     def detection_cb(self, data):
         print ("detection callback!!")
         for i in range(0, len(data.detections)):
@@ -1080,7 +978,6 @@ class Robot(object):
     def grasp_pt_cb(self, data):
         print("com callback!!")
         for i in range(0, len(data.angle)):
-            print("Angle: ", data.angle[i], "center of mass x, y: ", data.com_x[i], ", ", data.com_y[i])
             self.grasp_pt_x = data.com_x[i]
             self.grasp_pt_y = data.com_y[i]
             self.grasp_pt_ang = data.angle[i]  
@@ -1286,21 +1183,19 @@ class Robot(object):
         return grasp_success
 
     def instance_seg_grasp(self, position, heightmap_rotation_angle, workspace_limits, surface_pts):
-        print('Executing: grasp at (%f, %f, %f)' % (position[0], position[1], position[2]))
 
         # Call service for receiving center of mass through Yolact based on ros
-        self.start_eval_service()
+        if self.start_eval_service() is False:
+            return
+
         if self.grasp_pt_x == 0 or self.grasp_pt_y == 0 or self.grasp_pt_ang == 0: 
             time.sleep(3)
         
         position[0] = surface_pts[1280*(self.grasp_pt_y-1) + self.grasp_pt_x-1, 0]
         position[1] = surface_pts[1280*(self.grasp_pt_y-1) + self.grasp_pt_x-1, 1]
+
         print ("[grasp_pt_x, grasp_pt_y, grasp_pt_ang]", self.grasp_pt_x, self.grasp_pt_y, self.grasp_pt_ang)
-        print ("[position_x, position_y]", position[0], position[1])
         
-        #position[0] =  self.grasp_pt_x * 0.002+ #* heightmap_resolution +  workspace_limits[0][0] 
-        #position[1] = self.grasp_pt_y  * 0.002 - 0.3     #* heightmap_resolution +  workspace_limits[1][0] 
-        heightmap_rotation_angle = self.grasp_pt_ang  
         self.grasp_pt_x = 0
         self.grasp_pt_y = 0
         '''
@@ -1315,17 +1210,21 @@ class Robot(object):
         grasp_orientation = [1.0, 0.0] 
         print("heightmap_rotation_angle: ", heightmap_rotation_angle * 57.297469362) # Rad to deg
 
-        tool_rotation_angle = heightmap_rotation_angle - 0.785 
-        tool_orientation = np.asarray([grasp_orientation[0]*np.cos(tool_rotation_angle) - grasp_orientation[1]*np.sin(tool_rotation_angle), \
-            grasp_orientation[0]*np.sin(tool_rotation_angle) + grasp_orientation[1]*np.cos(tool_rotation_angle), 0.0])*np.pi
-        tool_orientation_angle = np.linalg.norm(tool_orientation)
-        tool_orientation_axis = tool_orientation/tool_orientation_angle
-        tool_orientation_rotm = utils.angle2rotm(tool_orientation_angle, tool_orientation_axis, point=None)[:3,:3]
-        
+
+        # Convert camera to robot coordination
+        self.grasp_pt_ang = self.grasp_pt_ang * 0.5
+        print("grasp_pt_ang: ", self.grasp_pt_ang * 57.297469362) # Rad to deg
+
+        tool_rotation_angle = self.grasp_pt_ang
+        tool_orientation = np.asarray([grasp_orientation[0]*np.sin(tool_rotation_angle) + grasp_orientation[1]*np.cos(tool_rotation_angle), \
+                grasp_orientation[0]*np.cos(tool_rotation_angle) - grasp_orientation[1]*np.sin(tool_rotation_angle), \
+                0.0])*np.pi
+        print ("tool_orientation : ", tool_orientation[0], tool_orientation[1], tool_orientation[2])
         # Attempt grasp
         position = np.asarray(position).copy()
         safty_threshold = 0.095
         position[2] = max(position[2] , workspace_limits[2][0]+ safty_threshold) # z of 3D coordinate
+        print ("[position_x, position_y, position_z", position[0], position[1], position[2])
 
         self.open_gripper()
 
@@ -1333,7 +1232,7 @@ class Robot(object):
         #self.tcp_socket.connect((self.tcp_host_ip, self.tcp_port))
         tcp_command = "def moveToGraspPt():\n"
         # Target grasping point
-        tcp_command += " movej(p[%f,%f,%f,%f,%f,%f],a=%f,v=%f,t=0,r=0.05)\n" % (position[0],position[1],position[2]+0.1, tool_orientation[0], tool_orientation[1], 0.0,self.joint_acc*0.25,self.joint_vel*0.25)
+        tcp_command += " movej(p[%f,%f,%f,%f,%f,%f],a=%f,v=%f,t=0,r=0.05)\n" % (position[0],position[1],position[2]+0.2, tool_orientation[0], tool_orientation[1], 0.0,self.joint_acc*0.25,self.joint_vel*0.25)
         # Move Down
         tcp_command += " movej(p[%f,%f,%f,%f,%f,%f],a=%f,v=%f,t=0,r=0.00)\n" % (position[0],position[1],position[2], tool_orientation[0], tool_orientation[1], 0.0,self.joint_acc*0.2,self.joint_vel*0.2)
         tcp_command += "end\n"
