@@ -1009,9 +1009,8 @@ class Robot(object):
             # Compute tool orientation from heightmap rotation angle
             grasp_orientation = [1.0,0.0] 
             print("heightmap_rotation_angle: ", heightmap_rotation_angle * 180 / 3.14)
-            if heightmap_rotation_angle-90 > np.pi:
-                heightmap_rotation_angle = heightmap_rotation_angle - 2*np.pi
-            tool_rotation_angle = (heightmap_rotation_angle-90)/2
+                
+            tool_rotation_angle = (heightmap_rotation_angle- np.pi*0.5)/2 
             tool_orientation = np.asarray([grasp_orientation[0]*np.cos(tool_rotation_angle) - grasp_orientation[1]*np.sin(tool_rotation_angle), grasp_orientation[0]*np.sin(tool_rotation_angle) + grasp_orientation[1]*np.cos(tool_rotation_angle), 0.0])*np.pi
             tool_orientation_angle = np.linalg.norm(tool_orientation)
             tool_orientation_axis = tool_orientation/tool_orientation_angle
