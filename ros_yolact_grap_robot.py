@@ -976,11 +976,14 @@ class Robot(object):
             print("Class name: ", data.detections[i].class_name)
 
     def grasp_pt_cb(self, data):
-        print("com callback!!")
+        print("Object number:", len(data.angle))
         for i in range(0, len(data.angle)):
-            self.grasp_pt_x = data.com_x[i]
-            self.grasp_pt_y = data.com_y[i]
-            self.grasp_pt_ang = data.angle[i]  
+            #self.grasp_pt_x = data.com_x[i]
+            #self.grasp_pt_y = data.com_y[i]
+            #self.grasp_pt_ang = data.angle[i] 
+            self.grasp_pt_x = data.com_x[0]
+            self.grasp_pt_y = data.com_y[0]
+            self.grasp_pt_ang = data.angle[0]  
 
     def grasp(self, position, heightmap_rotation_angle, workspace_limits):
         print('Executing: grasp at (%f, %f, %f)' % (position[0], position[1], position[2]))
@@ -1198,18 +1201,9 @@ class Robot(object):
         
         self.grasp_pt_x = 0
         self.grasp_pt_y = 0
-        '''
-        # 3D position [x, y, depth] of cartesian coordinate, conveted from pixel
-        primitive_position = [best_pix_x * heightmap_resolution + workspace_limits[0][0], \
-                                best_pix_y * heightmap_resolution + workspace_limits[1][0], \
-                                valid_depth_heightmap[best_pix_y][best_pix_x] + workspace_limits[2][0]]
-        '''
-
         self.go_action_point()
         # Compute tool orientation from heightmap rotation angle
         grasp_orientation = [1.0, 0.0] 
-        print("heightmap_rotation_angle: ", heightmap_rotation_angle * 57.297469362) # Rad to deg
-
 
         # Convert camera to robot coordination
         self.grasp_pt_ang = self.grasp_pt_ang * 0.5
@@ -1219,7 +1213,6 @@ class Robot(object):
         tool_orientation = np.asarray([grasp_orientation[0]*np.sin(tool_rotation_angle) + grasp_orientation[1]*np.cos(tool_rotation_angle), \
                 grasp_orientation[0]*np.cos(tool_rotation_angle) - grasp_orientation[1]*np.sin(tool_rotation_angle), \
                 0.0])*np.pi
-        print ("tool_orientation : ", tool_orientation[0], tool_orientation[1], tool_orientation[2])
         # Attempt grasp
         position = np.asarray(position).copy()
         safty_threshold = 0.095
