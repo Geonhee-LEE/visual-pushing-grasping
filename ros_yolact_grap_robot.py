@@ -1189,11 +1189,16 @@ class Robot(object):
 
         # Call service for receiving center of mass through Yolact based on ros
         if self.start_eval_service() is False:
-            return
-
+            return False
+        
+        # Validate the delayed detection results
         if self.grasp_pt_x == 0 or self.grasp_pt_y == 0 or self.grasp_pt_ang == 0: 
             time.sleep(3)
-        
+            
+            # Check the whether to detect the object through Yolact
+            if self.grasp_pt_x == 0 or self.grasp_pt_y == 0 or self.grasp_pt_ang == 0:
+                return False
+
         position[0] = surface_pts[1280*(self.grasp_pt_y-1) + self.grasp_pt_x-1, 0]
         position[1] = surface_pts[1280*(self.grasp_pt_y-1) + self.grasp_pt_x-1, 1]
 
