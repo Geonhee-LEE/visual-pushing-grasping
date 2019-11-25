@@ -8,6 +8,14 @@ import torch.nn.functional as F
 from torch.autograd import Variable
 
 
+from std_srvs.srv import SetBool, SetBoolResponse, SetBoolRequest
+from rospy.numpy_msg import numpy_msg
+from yolact_ros_msgs.msg import Detections
+from yolact_ros_msgs.msg import Detection
+from yolact_ros_msgs.msg import Box
+from yolact_ros_msgs.msg import Mask
+from yolact_ros_msgs.msg import GraspPt
+
 def get_pointcloud(color_img, depth_img, camera_intrinsics):
 
     # Get depth image size
@@ -31,10 +39,105 @@ def get_pointcloud(color_img, depth_img, camera_intrinsics):
     rgb_pts_g.shape = (im_h*im_w,1)
     rgb_pts_b.shape = (im_h*im_w,1)
 
-    cam_pts = np.concatenate((cam_pts_x, cam_pts_y, cam_pts_z), axis=1)
-    rgb_pts = np.concatenate((rgb_pts_r, rgb_pts_g, rgb_pts_b), axis=1)
+    cam_pts = np.concatenate((cam_pts_x, cam_pts_y, cam_pts_z), axis=1) # (921600, 3)
+    rgb_pts = np.concatenate((rgb_pts_r, rgb_pts_g, rgb_pts_b), axis=1) # (921600, 3)
 
     return cam_pts, rgb_pts
+
+def get_surface_pts(color_img, depth_img, cam_intrinsics, cam_pose):
+    # Compute heightmap size
+    # Get 3D point cloud from RGB-D images
+    surface_pts, _ = get_pointcloud(color_img, depth_img, cam_intrinsics)
+
+    # Transform 3D point cloud from camera coordinates to robot coordinates
+    surface_pts = np.transpose(np.dot(cam_pose[0:3,0:3], np.transpose(surface_pts))\
+                                + np.tile(cam_pose[0:3,3:], (1, surface_pts.shape[0])) # Construct an array by repeating A the number of times given by reps.
+                                ) #(921600, 3)
+    '''                         
+    print ("start [0, 0]", surface_pts[0,0], surface_pts[0,1])
+    print ("start [413, 654]", surface_pts[654*1280+413,0], surface_pts[654*1280+413,1])
+    print ("start [921600-1, 921600-1]", surface_pts[921600-1,0], surface_pts[921600-1,1])
+    '''
+    return surface_pts
+
+def get_mask_heightmap(detections, color_img, depth_img, cam_intrinsics, cam_pose, workspace_limits, heightmap_resolution):
+
+    for i in range(0, len(detections.detections)):
+        print("Class name: ", detections.detections[i].class_name)
+        print("Score: ", detections.detections[i].score)
+        #print("Box: ", detections[i].box.x1, data.detections[i].box.y1, data.detections[i].box.x2, data.detections[i].box.y2)
+        #print("Mask: ", detections[i].mask.width, data.detections[i].mask.height, data.detections[i].mask.mask)
+        mask = detections.detections[i].mask.mask
+
+    # Compute heightmap size
+    heightmap_size = np.round(((workspace_limits[1][1] - workspace_limits[1][0])/heightmap_resolution, (workspace_limits[0][1] - workspace_limits[0][0])/heightmap_resolution)).astype(int)
+
+    # Get 3D point cloud from RGB-D images
+    surface_pts, color_pts = get_pointcloud(color_img, depth_img, cam_intrinsics)
+
+    # Transform 3D point cloud from camera coordinates to robot coordinates
+    surface_pts = np.transpose(np.dot(cam_pose[0:3,0:3], np.transpose(surface_pts))\
+                                + np.tile(cam_pose[0:3,3:], (1, surface_pts.shape[0])) # Construct an array by repeating A the number of times given by reps.
+                                ) #(921600, 3)
+
+    pix_x = np.floor((surface_pts[:,0] )/heightmap_resolution).astype(int)
+    pix_y = np.floor((surface_pts[:,1] )/heightmap_resolution).astype(int)
+
+    # Sort surface points by z value
+    sort_z_ind = np.argsort(surface_pts[:,2])
+    surface_pts = surface_pts[sort_z_ind]
+    color_pts = color_pts[sort_z_ind]
+
+    # Sort mask according to surface_pts for extracting mask about instance segmentation
+    mask = np.asarray(mask)
+    mask.shape = (color_img.shape[0]*color_img.shape[1], 1)
+    mask = mask[sort_z_ind]
+    
+    # Filter out surface points outside heightmap boundaries
+    heightmap_valid_ind = np.logical_and \
+        (
+            np.logical_and \
+            (
+                np.logical_and \
+                (
+                    np.logical_and \
+                    (
+                        np.logical_and \
+                        (
+                            surface_pts[:,0] >= workspace_limits[0][0], surface_pts[:,0] < workspace_limits[0][1]
+                        ), 
+                        surface_pts[:,1] >= workspace_limits[1][0]
+                    ), 
+                    surface_pts[:,1] < workspace_limits[1][1]
+                ), 
+                surface_pts[:,2] < workspace_limits[2][1]
+            ),
+            mask[:,0] >= 1
+        )
+    surface_pts = surface_pts[heightmap_valid_ind]
+    color_pts = color_pts[heightmap_valid_ind]
+
+    # Create orthographic top-down-view RGB-D heightmaps
+    color_heightmap_r = np.zeros((heightmap_size[0], heightmap_size[1], 1), dtype=np.uint8)
+    color_heightmap_g = np.zeros((heightmap_size[0], heightmap_size[1], 1), dtype=np.uint8)
+    color_heightmap_b = np.zeros((heightmap_size[0], heightmap_size[1], 1), dtype=np.uint8)
+    depth_heightmap = np.zeros(heightmap_size)
+    heightmap_pix_x = np.floor((surface_pts[:,0] - workspace_limits[0][0])/heightmap_resolution).astype(int) #(921600,)
+    heightmap_pix_y = np.floor((surface_pts[:,1] - workspace_limits[1][0])/heightmap_resolution).astype(int) #(921600,)
+    color_heightmap_r[heightmap_pix_y,heightmap_pix_x] = color_pts[:,[0]]
+    color_heightmap_g[heightmap_pix_y,heightmap_pix_x] = color_pts[:,[1]]
+    color_heightmap_b[heightmap_pix_y,heightmap_pix_x] = color_pts[:,[2]]
+    color_heightmap = np.concatenate((color_heightmap_r, color_heightmap_g, color_heightmap_b), axis=2)
+    depth_heightmap[heightmap_pix_y, heightmap_pix_x] = surface_pts[:,2]
+    
+    z_bottom = workspace_limits[2][0]
+    depth_heightmap_threshold = 0.2
+    depth_heightmap = depth_heightmap - z_bottom + depth_heightmap_threshold
+    #print ("depth_heightmap: ", depth_heightmap)
+    depth_heightmap[depth_heightmap < 0] = 0
+    depth_heightmap[depth_heightmap == -z_bottom] = np.nan
+
+    return color_heightmap, depth_heightmap
 
 
 def get_heightmap(color_img, depth_img, cam_intrinsics, cam_pose, workspace_limits, heightmap_resolution):
@@ -46,9 +149,12 @@ def get_heightmap(color_img, depth_img, cam_intrinsics, cam_pose, workspace_limi
     surface_pts, color_pts = get_pointcloud(color_img, depth_img, cam_intrinsics)
 
     # Transform 3D point cloud from camera coordinates to robot coordinates
-    surface_pts = np.transpose(np.dot(cam_pose[0:3,0:3],    \
-                                np.transpose(surface_pts)) + np.tile(cam_pose[0:3,3:],  \
-                                (1,surface_pts.shape[0])))
+    surface_pts = np.transpose(np.dot(cam_pose[0:3,0:3], np.transpose(surface_pts))\
+                                + np.tile(cam_pose[0:3,3:], (1, surface_pts.shape[0])) # Construct an array by repeating A the number of times given by reps.
+                                ) #(921600, 3)
+
+    pix_x = np.floor((surface_pts[:,0] )/heightmap_resolution).astype(int)
+    pix_y = np.floor((surface_pts[:,1] )/heightmap_resolution).astype(int)
 
     # Sort surface points by z value
     sort_z_ind = np.argsort(surface_pts[:,2])
@@ -56,7 +162,23 @@ def get_heightmap(color_img, depth_img, cam_intrinsics, cam_pose, workspace_limi
     color_pts = color_pts[sort_z_ind]
 
     # Filter out surface points outside heightmap boundaries
-    heightmap_valid_ind = np.logical_and(np.logical_and(np.logical_and(np.logical_and(surface_pts[:,0] >= workspace_limits[0][0], surface_pts[:,0] < workspace_limits[0][1]), surface_pts[:,1] >= workspace_limits[1][0]), surface_pts[:,1] < workspace_limits[1][1]), surface_pts[:,2] < workspace_limits[2][1])
+    heightmap_valid_ind = np.logical_and \
+        (
+            np.logical_and \
+            (
+                np.logical_and \
+                (
+                    np.logical_and \
+                    (
+                    surface_pts[:,0] >= workspace_limits[0][0], 
+                    surface_pts[:,0] < workspace_limits[0][1]
+                    ), 
+                    surface_pts[:,1] >= workspace_limits[1][0]
+                ), 
+                surface_pts[:,1] < workspace_limits[1][1]
+            ), 
+            surface_pts[:,2] < workspace_limits[2][1]
+        )
     surface_pts = surface_pts[heightmap_valid_ind]
     color_pts = color_pts[heightmap_valid_ind]
 
@@ -65,8 +187,8 @@ def get_heightmap(color_img, depth_img, cam_intrinsics, cam_pose, workspace_limi
     color_heightmap_g = np.zeros((heightmap_size[0], heightmap_size[1], 1), dtype=np.uint8)
     color_heightmap_b = np.zeros((heightmap_size[0], heightmap_size[1], 1), dtype=np.uint8)
     depth_heightmap = np.zeros(heightmap_size)
-    heightmap_pix_x = np.floor((surface_pts[:,0] - workspace_limits[0][0])/heightmap_resolution).astype(int)
-    heightmap_pix_y = np.floor((surface_pts[:,1] - workspace_limits[1][0])/heightmap_resolution).astype(int)
+    heightmap_pix_x = np.floor((surface_pts[:,0] - workspace_limits[0][0])/heightmap_resolution).astype(int) #(921600,)
+    heightmap_pix_y = np.floor((surface_pts[:,1] - workspace_limits[1][0])/heightmap_resolution).astype(int) #(921600,)
     color_heightmap_r[heightmap_pix_y,heightmap_pix_x] = color_pts[:,[0]]
     color_heightmap_g[heightmap_pix_y,heightmap_pix_x] = color_pts[:,[1]]
     color_heightmap_b[heightmap_pix_y,heightmap_pix_x] = color_pts[:,[2]]
