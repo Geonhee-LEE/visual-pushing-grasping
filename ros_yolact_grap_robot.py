@@ -39,6 +39,8 @@ class Robot(object):
         detections_sub = rospy.Subscriber("detections", numpy_msg(Detections), self.detection_cb)
         graspPt_sub = rospy.Subscriber("com_info", numpy_msg(GraspPt), self.grasp_pt_cb)
         self.start_clent = rospy.ServiceProxy('/start_instance_seg', SetBool) 
+        self.detections_msgs = Detections()
+        self.grasp_pt_msgs = GraspPt()
         self.grasp_pt_x = 0
         self.grasp_pt_y = 0
         self.grasp_pt_ang = 0
@@ -959,7 +961,7 @@ class Robot(object):
 
     # Primitives ----------------------------------------------------------
 
-    def start_eval_service(self): 
+    def start_yolact_eval_service(self): 
         print ("Start_eval_service")
         rospy.wait_for_service('start_instance_seg')
         try:
@@ -969,14 +971,24 @@ class Robot(object):
             print ("Service call failed")
             return False
 
-                
+    def get_detections_msg(self): 
+        return self.detections_msgs
+
+    def get_grasp_pt_msg(self): 
+        return self.grasp_pt_msgs
+
     def detection_cb(self, data):
-        print ("detection callback!!")
-        for i in range(0, len(data.detections)):
-            print("Class name: ", data.detections[i].class_name)
+        self.detections_msgs = data
+        #for i in range(0, len(data.detections)):
+            #print("Class name: ", data.detections[i].class_name)
+            #print("Score: ", data.detections[i].score)
+            #print("Box: ", data.detections[i].box.x1, data.detections[i].box.y1, data.detections[i].box.x2, data.detections[i].box.y2)
+            #print("Mask: ", data.detections[i].mask.width, data.detections[i].mask.height, data.detections[i].mask.mask)
 
     def grasp_pt_cb(self, data):
+        self.grasp_pt_msgs = data
         print("Object number:", len(data.angle))
+        '''
         for i in range(0, len(data.angle)):
             #self.grasp_pt_x = data.com_x[i]
             #self.grasp_pt_y = data.com_y[i]
@@ -984,6 +996,7 @@ class Robot(object):
             self.grasp_pt_x = data.com_x[0]
             self.grasp_pt_y = data.com_y[0]
             self.grasp_pt_ang = data.angle[0]  
+        '''
 
     def grasp(self, position, heightmap_rotation_angle, workspace_limits):
         print('Executing: grasp at (%f, %f, %f)' % (position[0], position[1], position[2]))
@@ -1047,17 +1060,7 @@ class Robot(object):
                 vrep.simxSetObjectPosition(self.sim_client,grasped_object_handle,-1,(-0.5, 0.5 + 0.05*float(grasped_object_ind), 0.1),vrep.simx_opmode_blocking)
 
         else:
-            # Call service for receiving center of mass through Yolact based on ros
-            self.start_eval_service()
-            if self.grasp_pt_x == 0 and self.grasp_pt_y == 0:
-                time.sleep(3)
 
-
-            #position[0] =  self.grasp_pt_x * 0.002+ #* heightmap_resolution +  workspace_limits[0][0] 
-            #position[1] = self.grasp_pt_y  * 0.002 - 0.3     #* heightmap_resolution +  workspace_limits[1][0] 
-            heightmap_rotation_angle = self.grasp_pt_ang
-            self.grasp_pt_x = 0
-            self.grasp_pt_y = 0
             '''
             # 3D position [x, y, depth] of cartesian coordinate, conveted from pixel
             primitive_position = [best_pix_x * heightmap_resolution + workspace_limits[0][0], \
@@ -1185,36 +1188,34 @@ class Robot(object):
 
         return grasp_success
 
-    def instance_seg_grasp(self, position, heightmap_rotation_angle, workspace_limits, surface_pts):
-
-        # Call service for receiving center of mass through Yolact based on ros
-        if self.start_eval_service() is False:
+    def instance_seg_grasp(self, position, grasp_pt, workspace_limits, surface_pts):
+        
+        # Check the whether to detect the object through Yolact
+        if  len(grasp_pt.class_name)  == 0:
             return False
         
-        # Validate the delayed detection results
-        if self.grasp_pt_x == 0 or self.grasp_pt_y == 0 or self.grasp_pt_ang == 0: 
-            time.sleep(3)
-            
-            # Check the whether to detect the object through Yolact
-            if self.grasp_pt_x == 0 or self.grasp_pt_y == 0 or self.grasp_pt_ang == 0:
-                return False
-
-        position[0] = surface_pts[1280*(self.grasp_pt_y-1) + self.grasp_pt_x-1, 0]
-        position[1] = surface_pts[1280*(self.grasp_pt_y-1) + self.grasp_pt_x-1, 1]
-
-        print ("[grasp_pt_x, grasp_pt_y, grasp_pt_ang]", self.grasp_pt_x, self.grasp_pt_y, self.grasp_pt_ang)
+        for i in range(0, len(grasp_pt.class_name)):
+            print("grasp_pt class: ", grasp_pt.class_name[i])
+            print("grasp_pt score: ", grasp_pt.score[i])
+            print("grasp_pt x: ", grasp_pt.com_x[i])
+            print("grasp_pt y: ", grasp_pt.com_y[i])
+            print("grasp_pt ang: ", grasp_pt.angle[i])
         
-        self.grasp_pt_x = 0
-        self.grasp_pt_y = 0
+
+        print("class name: ", grasp_pt.class_name[np.argmax(grasp_pt.score)]) # Rad to deg
+        position[0] = surface_pts[1280*(grasp_pt.com_y[np.argmax(grasp_pt.score)]-1) + grasp_pt.com_x[np.argmax(grasp_pt.score)]-1, 0]
+        position[1] = surface_pts[1280*(grasp_pt.com_y[np.argmax(grasp_pt.score)]-1) + grasp_pt.com_x[np.argmax(grasp_pt.score)]-1, 1]
+
+        print ("[grasp_pt_x, grasp_pt_y, grasp_pt_ang]", grasp_pt.com_x[np.argmax(grasp_pt.score)], grasp_pt.com_y[np.argmax(grasp_pt.score)], grasp_pt.angle[np.argmax(grasp_pt.score)]* 57.297469362)
+        
         self.go_action_point()
         # Compute tool orientation from heightmap rotation angle
         grasp_orientation = [1.0, 0.0] 
 
         # Convert camera to robot coordination
-        self.grasp_pt_ang = self.grasp_pt_ang * 0.5
-        print("grasp_pt_ang: ", self.grasp_pt_ang * 57.297469362) # Rad to deg
+        grasp_pt.angle = grasp_pt.angle[np.argmax(grasp_pt.score)] * 0.5
 
-        tool_rotation_angle = self.grasp_pt_ang
+        tool_rotation_angle = grasp_pt.angle
         tool_orientation = np.asarray([grasp_orientation[0]*np.sin(tool_rotation_angle) + grasp_orientation[1]*np.cos(tool_rotation_angle), \
                 grasp_orientation[0]*np.cos(tool_rotation_angle) - grasp_orientation[1]*np.sin(tool_rotation_angle), \
                 0.0])*np.pi

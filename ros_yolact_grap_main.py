@@ -24,6 +24,14 @@ from std_msgs.msg import String
 from ur_moveit_commands import UR_Moveit_API
 
 
+from std_srvs.srv import SetBool, SetBoolResponse, SetBoolRequest
+from rospy.numpy_msg import numpy_msg
+from yolact_ros_msgs.msg import Detections
+from yolact_ros_msgs.msg import Detection
+from yolact_ros_msgs.msg import Box
+from yolact_ros_msgs.msg import Mask
+from yolact_ros_msgs.msg import GraspPt
+
 def main(args):
     # Can check log msgs according to log_level {rospy.DEBUG, rospy.INFO, rospy.WARN, rospy.ERROR} 
     rospy.init_node('ur5-grasping', anonymous=True, log_level=rospy.DEBUG)
@@ -233,7 +241,7 @@ def main(args):
                     print('> Push successful: %r' % (nonlocal_variables['push_success']))
                 elif nonlocal_variables['primitive_action'] == 'grasp':
                     #nonlocal_variables['grasp_success'] = robot.grasp(primitive_position, best_rotation_angle, workspace_limits)
-                    nonlocal_variables['grasp_success'] = robot.instance_seg_grasp(primitive_position, best_rotation_angle, workspace_limits, surface_pts)
+                    nonlocal_variables['grasp_success'] = robot.instance_seg_grasp(primitive_position, grasp_pt, workspace_limits, surface_pts)
                     print('> Grasp successful: %r' % (nonlocal_variables['grasp_success']))
 
                 nonlocal_variables['executing_action'] = False
@@ -267,12 +275,29 @@ def main(args):
         color_heightmap, depth_heightmap = utils.get_heightmap(color_img, depth_img, robot.cam_intrinsics, robot.cam_pose, workspace_limits, heightmap_resolution)
         surface_pts = utils.get_surface_pts(color_img, depth_img, robot.cam_intrinsics, robot.cam_pose)
         
+        # Call service for receiving center of mass through Yolact based on ros
+        robot.start_yolact_eval_service()
+
+        grasp_pt = GraspPt()
+        grasp_pt = robot.get_grasp_pt_msg()
+        
+        # For drawing gripper line
+        logger.save_image_with_grasp_line(trainer.iteration, color_img, grasp_pt)
+
+        detections = Detections()
+        detections = robot.get_detections_msg()
+        # For getting image based mask
+        mask_color_heightmap, mask_depth_heightmap = utils.get_mask_heightmap(detections, color_img, depth_img, robot.cam_intrinsics, robot.cam_pose, workspace_limits, heightmap_resolution)
+        
         valid_depth_heightmap = depth_heightmap.copy()
         valid_depth_heightmap[np.isnan(valid_depth_heightmap)] = 0
+        valid_mask_depth_heightmap = mask_depth_heightmap.copy()
+        valid_mask_depth_heightmap[np.isnan(valid_mask_depth_heightmap)] = 0
 
-        # Save RGB-D images and RGB-D heightmaps
+        # Save RGB-D images and RGB-D heightmaps, Mask heightmaps
         logger.save_images(trainer.iteration, color_img, depth_img, '0')
         logger.save_heightmaps(trainer.iteration, color_heightmap, valid_depth_heightmap, '0')
+        logger.save_mask_heightmaps(trainer.iteration, mask_color_heightmap, valid_mask_depth_heightmap, '0')
 
         # Reset simulation or pause real-world training if table is empty
         stuff_count = np.zeros(valid_depth_heightmap.shape)
