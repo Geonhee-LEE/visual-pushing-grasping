@@ -12,7 +12,7 @@ import cv2
 from collections import namedtuple
 import torch  
 from torch.autograd import Variable
-from ros_yolact_grap_robot import Robot
+from ros_yolact_rl_grap_robot import Robot
 from trainer import Trainer
 from logger import Logger
 import utils
@@ -220,10 +220,10 @@ def main(args):
 
                 # Visualize executed primitive, and affordances
                 if save_visualizations:
-                    push_pred_vis = trainer.get_prediction_vis(push_predictions, color_heightmap, nonlocal_variables['best_pix_ind'])
+                    push_pred_vis = trainer.get_prediction_vis(push_predictions, mask_color_heightmap, nonlocal_variables['best_pix_ind'])
                     logger.save_visualizations(trainer.iteration, push_pred_vis, 'push')
                     cv2.imwrite('visualization.push.png', push_pred_vis) 
-                    grasp_pred_vis = trainer.get_prediction_vis(grasp_predictions, color_heightmap, nonlocal_variables['best_pix_ind'])
+                    grasp_pred_vis = trainer.get_prediction_vis(grasp_predictions, mask_color_heightmap, nonlocal_variables['best_pix_ind'])
                     logger.save_visualizations(trainer.iteration, grasp_pred_vis, 'grasp')
                     cv2.imwrite('visualization.grasp.png', grasp_pred_vis)  
 
@@ -240,8 +240,8 @@ def main(args):
                     nonlocal_variables['push_success'] = robot.push(primitive_position, best_rotation_angle, workspace_limits)
                     print('> Push successful: %r' % (nonlocal_variables['push_success']))
                 elif nonlocal_variables['primitive_action'] == 'grasp':
-                    #nonlocal_variables['grasp_success'] = robot.grasp(primitive_position, best_rotation_angle, workspace_limits)
-                    nonlocal_variables['grasp_success'] = robot.instance_seg_grasp(primitive_position, grasp_pt, workspace_limits, surface_pts)
+                    nonlocal_variables['grasp_success'] = robot.grasp(primitive_position, best_rotation_angle, workspace_limits)
+                    #nonlocal_variables['grasp_success'] = robot.instance_seg_grasp(primitive_position, grasp_pt, workspace_limits, surface_pts)
                     print('> Grasp successful: %r' % (nonlocal_variables['grasp_success']))
 
                 nonlocal_variables['executing_action'] = False
@@ -302,7 +302,6 @@ def main(args):
         # Reset simulation or pause real-world training if table is empty
         stuff_count = np.zeros(valid_depth_heightmap.shape)
         stuff_count[valid_depth_heightmap > 0.02] = 1
-        print ("stuff_count: ", np.sum(stuff_count))
         
         #empty_threshold = 300
         empty_threshold = 300
@@ -332,7 +331,7 @@ def main(args):
         if not exit_called: 
             # Run forward pass with network to get affordances
             print("Run forward pass with network to get affordances!!!!!!")
-            push_predictions, grasp_predictions, state_feat = trainer.forward(color_heightmap, valid_depth_heightmap, is_volatile=True)
+            push_predictions, grasp_predictions, state_feat = trainer.forward(mask_color_heightmap, valid_mask_depth_heightmap, is_volatile=True)
 
             # Execute best primitive action on robot in another thread
             nonlocal_variables['executing_action'] = True
@@ -367,14 +366,14 @@ def main(args):
                     no_change_count[1] += 1
 
             # Compute training labels
-            label_value, prev_reward_value = trainer.get_label_value(prev_primitive_action, prev_push_success, prev_grasp_success, change_detected, prev_push_predictions, prev_grasp_predictions, color_heightmap, valid_depth_heightmap)
+            label_value, prev_reward_value = trainer.get_label_value(prev_primitive_action, prev_push_success, prev_grasp_success, change_detected, prev_push_predictions, prev_grasp_predictions, mask_color_heightmap, valid_mask_depth_heightmap)
             trainer.label_value_log.append([label_value]) 
             logger.write_to_log('label-value', trainer.label_value_log)
             trainer.reward_value_log.append([prev_reward_value])
             logger.write_to_log('reward-value', trainer.reward_value_log)
 
             # Backpropagate
-            #trainer.backprop(prev_color_heightmap, prev_valid_depth_heightmap, prev_primitive_action, prev_best_pix_ind, label_value)
+            trainer.backprop(prev_color_heightmap, prev_valid_depth_heightmap, prev_primitive_action, prev_best_pix_ind, label_value)
 
             # Adjust exploration probability
             if not is_testing:
@@ -414,18 +413,18 @@ def main(args):
                     print('Experience replay: iteration %d (surprise value: %f)' % (sample_iteration, sample_surprise_values[sorted_surprise_ind[rand_sample_ind]]))
 
                     # Load sample RGB-D heightmap
-                    sample_color_heightmap = cv2.imread(os.path.join(logger.color_heightmaps_directory, '%06d.0.color.png' % (sample_iteration)))
+                    sample_color_heightmap = cv2.imread(os.path.join(logger.mask_color_heightmaps_directory, '%06d.0.color.png' % (sample_iteration)))
                     sample_color_heightmap = cv2.cvtColor(sample_color_heightmap, cv2.COLOR_BGR2RGB)
-                    sample_depth_heightmap = cv2.imread(os.path.join(logger.depth_heightmaps_directory, '%06d.0.depth.png' % (sample_iteration)), -1)
+                    sample_depth_heightmap = cv2.imread(os.path.join(logger.mask_depth_heightmaps_directory, '%06d.0.depth.png' % (sample_iteration)), -1)
                     sample_depth_heightmap = sample_depth_heightmap.astype(np.float32)/100000
 
                     # Compute forward pass with sample
                     sample_push_predictions, sample_grasp_predictions, sample_state_feat = trainer.forward(sample_color_heightmap, sample_depth_heightmap, is_volatile=True)
 
                     # Load next sample RGB-D heightmap
-                    next_sample_color_heightmap = cv2.imread(os.path.join(logger.color_heightmaps_directory, '%06d.0.color.png' % (sample_iteration+1)))
+                    next_sample_color_heightmap = cv2.imread(os.path.join(logger.mask_color_heightmaps_directory, '%06d.0.color.png' % (sample_iteration+1)))
                     next_sample_color_heightmap = cv2.cvtColor(next_sample_color_heightmap, cv2.COLOR_BGR2RGB)
-                    next_sample_depth_heightmap = cv2.imread(os.path.join(logger.depth_heightmaps_directory, '%06d.0.depth.png' % (sample_iteration+1)), -1)
+                    next_sample_depth_heightmap = cv2.imread(os.path.join(logger.mask_depth_heightmaps_directory, '%06d.0.depth.png' % (sample_iteration+1)), -1)
                     next_sample_depth_heightmap = next_sample_depth_heightmap.astype(np.float32)/100000
 
                     sample_push_success = sample_reward_value == 0.5
@@ -435,7 +434,7 @@ def main(args):
 
                     # Get labels for sample and backpropagate
                     sample_best_pix_ind = (np.asarray(trainer.executed_action_log)[sample_iteration,1:4]).astype(int)
-                    #trainer.backprop(sample_color_heightmap, sample_depth_heightmap, sample_primitive_action, sample_best_pix_ind, trainer.label_value_log[sample_iteration])
+                    trainer.backprop(sample_color_heightmap, sample_depth_heightmap, sample_primitive_action, sample_best_pix_ind, trainer.label_value_log[sample_iteration])
 
                     # Recompute prediction value and label for replay buffer
                     if sample_primitive_action == 'push':
@@ -466,8 +465,8 @@ def main(args):
         # Save information for next training step
         prev_color_img = color_img.copy()
         prev_depth_img = depth_img.copy()
-        prev_color_heightmap = color_heightmap.copy()
-        prev_depth_heightmap = depth_heightmap.copy()
+        prev_color_heightmap = mask_color_heightmap.copy()
+        prev_depth_heightmap = valid_mask_depth_heightmap.copy()
         prev_valid_depth_heightmap = valid_depth_heightmap.copy()
         prev_push_success = nonlocal_variables['push_success']
         prev_grasp_success = nonlocal_variables['grasp_success']

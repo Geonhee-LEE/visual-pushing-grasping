@@ -5,6 +5,7 @@
 ### Usage
 
 To run UR5 with ROS, run the following:
+
 ```shell
 roslaunch ur_modern_driver ur5_bringup.launch 
 ```
@@ -33,10 +34,6 @@ Conda env: (pytorch_ros)
 python ros_yolact_grap_main.py --tcp_host_ip 192.168.0.3 --tcp_port 30002 --push_rewards --experience_replay --explore_rate_decay --save_visualizations --grasp_only --load_snapshot --snapshot_file logs/2019-11-04-continue/models/snapshot-000840.reinforcement.pth 
 ```
 
-
-=======
-python ros_main.py --tcp_host_ip 192.168.0.3 --tcp_port 30002 --push_rewards --experience_replay --explore_rate_decay --save_visualizations --grasp_only --load_snapshot --snapshot_file logs/2019-11-04-continue/models/snapshot-000440.reinforcement.pth  --continue_logging --logging_directory logs/2019-11-04-continue/
-```
 
 ### Instructions
 
@@ -188,6 +185,7 @@ The same code in this repository can be used to train on a real UR5 robot arm (t
 #### Installation Instructions:
 
 1. Connect your RealSense camera with a USB 3.0 compliant cable (important: RealSense D400 series uses a USB-C cable, but still requires them to be 3.0 compliant to be able to stream RGB-D data).
+
 1. To start the TCP server and RGB-D streaming, run the following:
 
     ```shell
@@ -226,10 +224,11 @@ python main.py --tcp_host_ip 192.168.0.3 --tcp_port 30002 --push_rewards --exper
 ```
 
 #### Finetune for continuing training
+
 ```shell
 python main.py --tcp_host_ip 192.168.0.3 --tcp_port 30002 --push_rewards --experience_replay --explore_rate_decay --save_visualizations --grasp_only --load_snapshot --snapshot_file logs/2019-11-04.13\:18\:01/models/snapshot-000340.reinforcement.pth --continue_logging --logging_directory logs/2019-11-04.13\:18\:01/
 ```
-=======
+
 
 #### Finetuning 
 To continue training with origin weight and logging file, simply run:
